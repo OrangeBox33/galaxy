@@ -68,6 +68,8 @@ export type InviteDot = {
 export type Scene = {
 	stars: Map<string, Star>;
 	order: Star[];
+	// Те же звёзды, от крупных к мелким: венец достаётся сначала им.
+	byRadius: Star[];
 	edges: [Star, Star][];
 	invites: InviteDot[];
 	neighbours: Map<string, Set<string>>;
@@ -80,6 +82,7 @@ export function emptyScene(): Scene {
 	return {
 		stars: new Map(),
 		order: [],
+		byRadius: [],
 		edges: [],
 		invites: [],
 		neighbours: new Map(),
@@ -190,6 +193,7 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 		// Глубина у звезды постоянна, поэтому сортируем один раз здесь,
 		// а не в каждом кадре.
 		order: [...stars.values()].sort((a, b) => a.depth - b.depth || a.radius - b.radius),
+		byRadius: [...stars.values()].sort((a, b) => b.radius - a.radius),
 		edges,
 		invites,
 		neighbours,

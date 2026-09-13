@@ -4,7 +4,7 @@ import type { Graph } from '../api/types';
 import { clamp01, easeInOutCubic, easeOutBack, prefersReducedMotion } from './animate';
 import { Camera } from './camera';
 import { DUST_PARALLAX, DUST_TILE_SIZE, dustTile } from './dust';
-import { CORE, SKY_BOTTOM, SKY_MID, SKY_TOP, rgb, rgba } from './palette';
+import { CORE, SKY_BOTTOM, SKY_MID, SKY_TOP, rgb, rgba, type RGB } from './palette';
 import { glowSprite, resetSprites } from './sprites';
 import {
 	APPEAR_DURATION,
@@ -52,6 +52,38 @@ const EDGE_ALPHA_NEAR = 0.34;
 const EDGE_ALPHA_FAR = 0.015;
 // Яркость в сплошном режиме: линий видно много, поэтому каждая тусклее.
 const EDGE_ALPHA_PLAIN = 0.22;
+
+// ── Излучение ──────────────────────────────────────────────────────────
+// Связь выходит из звезды не прямой палкой, а изгибом — как след
+// вырывающегося потока. Изгиб медленно колышется, амплитуда растёт
+// с числом связей: у хаба энергии больше.
+const BEND_BASE = 0.11; // доля длины связи при одной связи
+const BEND_PER_LINK = 0.012; // прибавка за каждую следующую
+const BEND_MAX = 0.32;
+const BEND_PERIOD = [7, 14]; // секунды, от и до
+
+// ── Корона ─────────────────────────────────────────────────────────────
+// Вокруг звезды — венец из языков пламени: плотный слой коротких у самого ядра
+// и длинные сужающиеся поверх. Языки мерцают по длине и слегка подвёрнуты
+// в одну сторону, отчего венец кажется вращающимся потоком. Чем больше связей,
+// тем языков больше и тем они длиннее.
+const CORONA_MIN_SCREEN = 7; // короче этого в пикселях венец не рисуем: не разглядеть
+const CORONA_TONGUES = [14, 44]; // языков при минимуме и максимуме связей
+const CORONA_DEGREE_FULL = 26; // при скольких связях венец в полную силу
+const CORONA_LENGTH = 0.6; // длина языка от радиуса свечения
+const CORONA_SWEEP = 0.16; // подворот языка, радианы
+const CORONA_SPIN = 90; // секунд на полный оборот венца
+const CORONA_FLICKER = [1.7, 3.1]; // секунды на цикл мерцания
+// Больше этого числа венцов за кадр не рисуем: при сильном приближении
+// их место занимают самые крупные звёзды, а мелочь обходится ореолом.
+const CORONA_MAX_STARS = 40;
+
+// По связи бегут импульсы света — от звезды к звезде. Видно их только там,
+// где связь светится, поэтому импульс словно вырывается из одной звезды
+// и спустя мгновение прилетает во вторую.
+const PULSE_MIN_DEGREE = 3; // ниже этого звезде нечего излучать
+const PULSE_PERIOD = [2.4, 4.6]; // секунды на пробег
+const PULSE_SIZE = 1.5; // экранных пикселей при одной связи
 
 const TAP_SLOP = 6; // пикселей: дальше это уже перетаскивание, а не тап
 const LABEL_ZOOM = 1.2;
@@ -182,6 +214,15 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		return 1 + 0.1 * Math.sin(star.twinkleFreq * (now / 1000) + star.twinklePhase);
 	}
 
+	// Дыхание ореола: чем больше связей, тем заметнее звезда пульсирует.
+	// Одиночка на краю почти не шевелится, хаб — ощутимо.
+	function breath(star: Star, now: number): number {
+		if (reduced) return 1;
+		const power = Math.min(1, star.node.degree / 18);
+		const period = 4 + 6 * fraction(star.id, 7);
+		return 1 + 0.16 * power * Math.sin((now / 1000) * ((Math.PI * 2) / period) + star.twinklePhase);
+	}
+
 	// ── Хит-тест: линейный перебор, при n ≤ 200 это дёшево ───────────────
 	// Считаем в экранных пикселях: из-за глубины у каждой звезды свой масштаб,
 	// и сравнивать мировые расстояния между ними уже нельзя.
@@ -231,6 +272,7 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		drawEdges(now, isLit);
 		drawInvites(now);
 		drawGlows(now, isLit);
+		drawCorona(now, isLit);
 		drawCores(now, isLit);
 		drawLabels(now, isLit);
 	}
@@ -280,6 +322,40 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		ctx.restore();
 	}
 
+	// Устойчивое число в [0,1) из id звезды: фазы колебаний должны быть
+	// у каждой свои, но одинаковые при каждом заходе.
+	function fraction(id: string, salt: number): number {
+		let hash = 2166136261 ^ Math.imul(salt, 0x9e3779b1);
+		for (let i = 0; i < id.length; i += 1) {
+			hash ^= id.charCodeAt(i);
+			hash = Math.imul(hash, 16777619);
+		}
+		return ((hash >>> 0) % 10000) / 10000;
+	}
+
+	// Насколько сильно связь изгибается у своего конца.
+	function bendAmount(star: Star, length: number, now: number, salt: number): number {
+		if (reduced) return 0;
+		const energy = Math.min(BEND_MAX, BEND_BASE + BEND_PER_LINK * star.node.degree);
+		const period =
+			BEND_PERIOD[0] + (BEND_PERIOD[1] - BEND_PERIOD[0]) * fraction(star.id, salt);
+		const phase = fraction(star.id, salt + 11) * Math.PI * 2;
+		return length * energy * Math.sin((now / 1000) * ((Math.PI * 2) / period) + phase);
+	}
+
+	// Точка на кубической кривой — нужна, чтобы импульс бежал именно по связи,
+	// а не по прямой между звёздами.
+	function bezier(
+		t: number,
+		p0: number,
+		c1: number,
+		c2: number,
+		p1: number,
+	): number {
+		const u = 1 - t;
+		return u * u * u * p0 + 3 * u * u * t * c1 + 3 * u * t * t * c2 + t * t * t * p1;
+	}
+
 	// Яркость вдоль линии: у концов — плато, дальше обрыв. Обрыв, а не плавный
 	// спуск: иначе вместо звёзд с лучами получается всё та же паутина,
 	// только тусклее.
@@ -317,6 +393,58 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		gradient.addColorStop(endB + (1 - endB) * 0.34, rgba(b.halo, near * 0.85));
 		gradient.addColorStop(1, rgba(b.halo, near));
 		return gradient;
+	}
+
+	// Импульс света, бегущий по связи. Чем больше связей у звезды, тем чаще
+	// и крупнее импульсы: поток энергии виден прямо на карте.
+	function drawPulse(
+		now: number,
+		a: Star,
+		b: Star,
+		x1: number,
+		y1: number,
+		c1x: number,
+		c1y: number,
+		c2x: number,
+		c2y: number,
+		x2: number,
+		y2: number,
+		length: number,
+		reachA: number,
+		reachB: number,
+		near: number,
+	): void {
+		if (reduced) return;
+
+		const degree = Math.max(a.node.degree, b.node.degree);
+		if (degree < PULSE_MIN_DEGREE || length < 4) return;
+
+		// Импульс летит от той звезды, что мощнее.
+		const forward = a.node.degree >= b.node.degree;
+		const key = forward ? a.id + b.id : b.id + a.id;
+		const period =
+			PULSE_PERIOD[0] + (PULSE_PERIOD[1] - PULSE_PERIOD[0]) * fraction(key, 3);
+		const progress = ((now / 1000 / period) + fraction(key, 4)) % 1;
+		const t = forward ? progress : 1 - progress;
+
+		// Видно импульс только там, где светится сама связь: в середине
+		// он гаснет и появляется снова уже у второй звезды.
+		const fromStart = t * length;
+		const fromEnd = (1 - t) * length;
+		const visible = Math.max(
+			1 - fromStart / Math.max(1, reachA),
+			1 - fromEnd / Math.max(1, reachB),
+		);
+		if (visible <= 0) return;
+
+		const px = bezier(t, x1, c1x, c2x, x2);
+		const py = bezier(t, y1, c1y, c2y, y2);
+		const size = PULSE_SIZE * (1 + Math.min(1.4, degree * 0.05)) * Math.max(0.6, camera.zoom);
+
+		ctx.fillStyle = rgba(forward ? a.halo : b.halo, Math.min(0.85, near * 2.2 * visible));
+		ctx.beginPath();
+		ctx.arc(px, py, size * visible, 0, Math.PI * 2);
+		ctx.fill();
 	}
 
 	function drawEdges(now: number, isLit: (id: string) => boolean): void {
@@ -359,10 +487,25 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 			const reachB = b.radius * pb.scale * EDGE_GLOW_RADII;
 
 			ctx.strokeStyle = edgeGradient(x1, y1, x2, y2, a, b, length, reachA, reachB, near, far);
+
+			// Изгиб: контрольные точки отходят от прямой в разные стороны,
+			// поэтому связь выходит из звезды дугой и так же входит в другую.
+			const nx = length > 0 ? -(y2 - y1) / length : 0;
+			const ny = length > 0 ? (x2 - x1) / length : 0;
+			const bendA = bendAmount(a, length, now, 1);
+			const bendB = -bendAmount(b, length, now, 2);
+
+			const c1x = x1 + (x2 - x1) / 3 + nx * bendA;
+			const c1y = y1 + (y2 - y1) / 3 + ny * bendA;
+			const c2x = x1 + ((x2 - x1) * 2) / 3 + nx * bendB;
+			const c2y = y1 + ((y2 - y1) * 2) / 3 + ny * bendB;
+
 			ctx.beginPath();
 			ctx.moveTo(x1, y1);
-			ctx.lineTo(x2, y2);
+			ctx.bezierCurveTo(c1x, c1y, c2x, c2y, x2, y2);
 			ctx.stroke();
+
+			drawPulse(now, a, b, x1, y1, c1x, c1y, c2x, c2y, x2, y2, length, reachA, reachB, near);
 		}
 		ctx.restore();
 	}
@@ -403,6 +546,145 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		ctx.restore();
 	}
 
+	// Венец из языков пламени. Все языки одного слоя собираются в один путь
+	// и заливаются разом: две заливки на звезду вместо сотни.
+	function drawCorona(now: number, isLit: (id: string) => boolean): void {
+		ctx.save();
+		ctx.globalCompositeOperation = 'lighter';
+
+		let drawn = 0;
+		// Идём от самых крупных звёзд: если упрёмся в предел, без венца
+		// останется мелочь, у которой он и так почти не виден.
+		for (const star of scene.byRadius) {
+			if (drawn >= CORONA_MAX_STARS) break;
+			if (star.node.isBlocked) continue;
+
+			const { sx, sy, scale: depthScale } = project(star, now);
+			const appear = appearScale(star, now);
+			const glow = star.glow * depthScale * appear * breath(star, now);
+			if (glow < CORONA_MIN_SCREEN) continue;
+			if (sx + glow < 0 || sx - glow > cssWidth || sy + glow < 0 || sy - glow > cssHeight) {
+				continue;
+			}
+			drawn += 1;
+
+			const power = Math.min(1, star.node.degree / CORONA_DEGREE_FULL);
+			const count = Math.round(
+				CORONA_TONGUES[0] + (CORONA_TONGUES[1] - CORONA_TONGUES[0]) * power,
+			);
+			const step = (Math.PI * 2) / count;
+			const inner = star.radius * depthScale * appear;
+			const length = glow * CORONA_LENGTH * (0.5 + 0.5 * power);
+			const dim = isLit(star.id) ? 1 : 1 - 0.65 * highlight;
+			const seed = fraction(star.id, 21);
+
+			// Венец медленно поворачивается, у каждой звезды со своей скоростью
+			// и в свою сторону — иначе всё небо начинает вращаться синхронно.
+			const spin = reduced
+				? seed * Math.PI * 2
+				: (now / 1000) * ((Math.PI * 2) / CORONA_SPIN) * (seed < 0.5 ? 1 : -1) +
+					seed * Math.PI * 2;
+
+			const period = CORONA_FLICKER[0] + (CORONA_FLICKER[1] - CORONA_FLICKER[0]) * seed;
+			const phase = reduced ? 0 : (now / 1000) * ((Math.PI * 2) / period);
+
+			// Длинные языки. Три несовпадающие гармоники дают неровное,
+			// «живое» мерцание, но разброс длин остаётся умеренным.
+			ctx.beginPath();
+			for (let i = 0; i < count; i += 1) {
+				const flicker =
+					0.72 +
+					0.16 * Math.sin(phase + i * 2.399) +
+					0.09 * Math.sin(phase * 1.7 + i * 1.117) +
+					0.05 * Math.sin(phase * 0.55 + i * 0.71);
+				tongue(
+					sx,
+					sy,
+					spin + i * step,
+					inner * 0.8,
+					inner + length * flicker,
+					step * 0.85,
+					CORONA_SWEEP,
+				);
+			}
+			ctx.fillStyle = coronaFill(sx, sy, inner * 0.8, inner + length, star.halo, 0.34 * dim);
+			ctx.fill();
+
+			// Плотный слой коротких языков у самого ядра, подвёрнутых в другую
+			// сторону: он и создаёт ощущение кипящей поверхности.
+			ctx.beginPath();
+			for (let i = 0; i < count; i += 1) {
+				const flicker = 0.6 + 0.4 * Math.sin(phase * 1.3 + i * 2.7);
+				tongue(
+					sx,
+					sy,
+					spin + i * step + step * 0.5,
+					inner * 0.45,
+					inner + length * 0.3 * flicker,
+					step * 0.95,
+					-CORONA_SWEEP * 0.7,
+				);
+			}
+			ctx.fillStyle = coronaFill(
+				sx,
+				sy,
+				inner * 0.45,
+				inner + length * 0.3,
+				star.halo,
+				0.5 * dim,
+			);
+			ctx.fill();
+		}
+
+		ctx.restore();
+	}
+
+	// Один язык: сужающийся к острию лепесток, подвёрнутый набок.
+	function tongue(
+		cx: number,
+		cy: number,
+		angle: number,
+		from: number,
+		to: number,
+		width: number,
+		sweep: number,
+	): void {
+		const half = width / 2;
+		const tipAngle = angle + sweep;
+		const mid = (from + to) / 2;
+
+		ctx.moveTo(cx + Math.cos(angle - half) * from, cy + Math.sin(angle - half) * from);
+		ctx.quadraticCurveTo(
+			cx + Math.cos(angle - half * 0.3 + sweep * 0.45) * mid,
+			cy + Math.sin(angle - half * 0.3 + sweep * 0.45) * mid,
+			cx + Math.cos(tipAngle) * to,
+			cy + Math.sin(tipAngle) * to,
+		);
+		ctx.quadraticCurveTo(
+			cx + Math.cos(angle + half * 0.3 + sweep * 0.45) * mid,
+			cy + Math.sin(angle + half * 0.3 + sweep * 0.45) * mid,
+			cx + Math.cos(angle + half) * from,
+			cy + Math.sin(angle + half) * from,
+		);
+		ctx.closePath();
+	}
+
+	// Заливка венца: у основания плотная, к остриям сходит на нет.
+	function coronaFill(
+		cx: number,
+		cy: number,
+		from: number,
+		to: number,
+		color: RGB,
+		alpha: number,
+	): CanvasGradient {
+		const gradient = ctx.createRadialGradient(cx, cy, from * 0.5, cx, cy, to);
+		gradient.addColorStop(0, rgba(color, alpha));
+		gradient.addColorStop(0.45, rgba(color, alpha * 0.6));
+		gradient.addColorStop(1, rgba(color, 0));
+		return gradient;
+	}
+
 	function drawGlows(now: number, isLit: (id: string) => boolean): void {
 		ctx.save();
 		ctx.globalCompositeOperation = 'lighter';
@@ -413,7 +695,7 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 			const { sx: x, sy: y, scale: depthScale } = project(star, now);
 			const scale = appearScale(star, now);
-			const glow = star.glow * depthScale * scale;
+			const glow = star.glow * depthScale * scale * breath(star, now);
 			if (glow < 0.5) continue;
 			if (x + glow < 0 || x - glow > cssWidth || y + glow < 0 || y - glow > cssHeight) continue;
 
