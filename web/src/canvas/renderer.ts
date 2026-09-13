@@ -16,6 +16,7 @@ import {
 	type Scene,
 	type Star,
 } from './scene';
+import { stepWobble, type Grab } from './wobble';
 
 export type Pick =
 	| { kind: 'node'; id: string }
@@ -32,6 +33,10 @@ export type RendererHandlers = {
 // в звезду невозможно попасть пальцем.
 const HIT_PAD_WORLD = 8;
 const HIT_PAD_MIN_SCREEN = 14;
+
+// Глубина: ближние звёзды крупнее и при движении карты смещаются сильнее
+// дальних. Это не настоящее 3D, а параллакс — но объём читается именно так.
+const DEPTH_STRENGTH = 0.22;
 
 const TAP_SLOP = 6; // пикселей: дальше это уже перетаскивание, а не тап
 const LABEL_ZOOM = 1.2;
@@ -54,6 +59,10 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 	let running = true;
 	let last = performance.now();
 	let firstFit = true;
+
+	// Перетаскивание звезды и затухающая болтанка после него.
+	let grab: Grab = null;
+	let wobbling = false;
 
 	// ── Размер канваса и devicePixelRatio ────────────────────────────────
 	function resize(): void {
@@ -100,11 +109,38 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 	// ── Позиция звезды с учётом дрейфа ───────────────────────────────────
 	function livePosition(star: Star, now: number): { x: number; y: number } {
 		const base = starPosition(star, now);
-		if (reduced) return base;
+		if (reduced) return { x: base.x + star.ox, y: base.y + star.oy };
 		const t = now / 1000;
 		return {
-			x: base.x + star.amp * Math.sin(star.freqX * t + star.phaseX),
-			y: base.y + star.amp * Math.sin(star.freqY * t + star.phaseY),
+			x: base.x + star.ox + star.amp * Math.sin(star.freqX * t + star.phaseX),
+			y: base.y + star.oy + star.amp * Math.sin(star.freqY * t + star.phaseY),
+		};
+	}
+
+	// Проекция на экран с учётом глубины. Ближние звёзды отходят от центра
+	// экрана сильнее дальних — при панорамировании это и даёт объём.
+	// Множитель scale — во сколько раз рисовать размеры этой звезды.
+	function project(star: Star, now: number): { sx: number; sy: number; scale: number } {
+		const position = livePosition(star, now);
+		const scale = camera.zoom * (1 + star.depth * DEPTH_STRENGTH);
+		return {
+			sx: cssWidth / 2 + (position.x - camera.x) * scale,
+			sy: cssHeight / 2 + (position.y - camera.y) * scale,
+			scale,
+		};
+	}
+
+	// Обратный перевод: куда в мире попадает палец, если целиться
+	// в звезду на её глубине.
+	function screenToWorldAtDepth(
+		screenX: number,
+		screenY: number,
+		depth: number,
+	): { x: number; y: number } {
+		const scale = camera.zoom * (1 + depth * DEPTH_STRENGTH);
+		return {
+			x: (screenX - cssWidth / 2) / scale + camera.x,
+			y: (screenY - cssHeight / 2) / scale + camera.y,
 		};
 	}
 
@@ -127,23 +163,33 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 	}
 
 	// ── Хит-тест: линейный перебор, при n ≤ 200 это дёшево ───────────────
-	function pickAt(screenX: number, screenY: number): Pick {
+	// Считаем в экранных пикселях: из-за глубины у каждой звезды свой масштаб,
+	// и сравнивать мировые расстояния между ними уже нельзя.
+	function pickStar(screenX: number, screenY: number): Star | null {
 		const now = performance.now();
-		const worldX = camera.screenToWorldX(screenX);
-		const worldY = camera.screenToWorldY(screenY);
-		const pad = Math.max(HIT_PAD_WORLD, HIT_PAD_MIN_SCREEN / camera.zoom);
+		let best: { star: Star; distance: number } | null = null;
 
-		let best: { id: string; distance: number } | null = null;
 		for (const star of scene.stars.values()) {
-			const position = livePosition(star, now);
-			const distance = Math.hypot(position.x - worldX, position.y - worldY);
-			if (distance > star.radius + pad) continue;
-			if (!best || distance < best.distance) best = { id: star.id, distance };
+			const { sx, sy, scale } = project(star, now);
+			const distance = Math.hypot(sx - screenX, sy - screenY);
+			const reach = Math.max(star.radius * scale + HIT_PAD_WORLD * scale, HIT_PAD_MIN_SCREEN);
+			if (distance > reach) continue;
+			if (!best || distance < best.distance) best = { star, distance };
 		}
-		if (best) return { kind: 'node', id: best.id };
+		return best?.star ?? null;
+	}
 
+	function pickAt(screenX: number, screenY: number): Pick {
+		const star = pickStar(screenX, screenY);
+		if (star) return { kind: 'node', id: star.id };
+
+		const inviter = scene.stars.get(scene.me);
+		const depth = inviter?.depth ?? 0;
+		const scale = camera.zoom * (1 + depth * DEPTH_STRENGTH);
 		for (const dot of scene.invites) {
-			if (Math.hypot(dot.x - worldX, dot.y - worldY) <= 2.5 + pad) {
+			const sx = cssWidth / 2 + (dot.x - camera.x) * scale;
+			const sy = cssHeight / 2 + (dot.y - camera.y) * scale;
+			if (Math.hypot(sx - screenX, sy - screenY) <= HIT_PAD_MIN_SCREEN) {
 				return { kind: 'invite', id: dot.id };
 			}
 		}
@@ -220,12 +266,12 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		ctx.lineWidth = 0.8;
 
 		for (const [a, b] of scene.edges) {
-			const pa = livePosition(a, now);
-			const pb = livePosition(b, now);
-			let x1 = camera.worldToScreenX(pa.x);
-			let y1 = camera.worldToScreenY(pa.y);
-			let x2 = camera.worldToScreenX(pb.x);
-			let y2 = camera.worldToScreenY(pb.y);
+			const pa = project(a, now);
+			const pb = project(b, now);
+			let x1 = pa.sx;
+			let y1 = pa.sy;
+			let x2 = pb.sx;
+			let y2 = pb.sy;
 
 			// Линия к только что зажёгшейся звезде прочерчивается за 400 мс.
 			const fresh = a.appearAt !== null ? a : b.appearAt !== null ? b : null;
@@ -262,7 +308,12 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		if (scene.invites.length === 0) return;
 		const inviter = scene.stars.get(scene.me);
 		if (!inviter) return;
-		const from = livePosition(inviter, now);
+		const from = project(inviter, now);
+		// Точки живут на глубине пригласившего — иначе пунктир к ним
+		// расходился бы с его звездой при движении карты.
+		const scale = camera.zoom * (1 + inviter.depth * DEPTH_STRENGTH);
+		const dotX = (dot: InviteDot): number => cssWidth / 2 + (dot.x - camera.x) * scale;
+		const dotY = (dot: InviteDot): number => cssHeight / 2 + (dot.y - camera.y) * scale;
 
 		const pulse = 0.35 + 0.2 * (0.5 + 0.5 * Math.sin((now / 1000) * ((Math.PI * 2) / 3)));
 
@@ -272,8 +323,8 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		ctx.strokeStyle = rgba([0x6b, 0x72, 0x80], 0.25);
 		for (const dot of scene.invites) {
 			ctx.beginPath();
-			ctx.moveTo(camera.worldToScreenX(from.x), camera.worldToScreenY(from.y));
-			ctx.lineTo(camera.worldToScreenX(dot.x), camera.worldToScreenY(dot.y));
+			ctx.moveTo(from.sx, from.sy);
+			ctx.lineTo(dotX(dot), dotY(dot));
 			ctx.stroke();
 		}
 		ctx.restore();
@@ -282,13 +333,7 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		ctx.fillStyle = rgba([0x9c, 0xa3, 0xaf], reduced ? 0.45 : pulse);
 		for (const dot of scene.invites) {
 			ctx.beginPath();
-			ctx.arc(
-				camera.worldToScreenX(dot.x),
-				camera.worldToScreenY(dot.y),
-				Math.max(2, 2.5 * camera.zoom),
-				0,
-				Math.PI * 2,
-			);
+			ctx.arc(dotX(dot), dotY(dot), Math.max(2, 2.5 * scale), 0, Math.PI * 2);
 			ctx.fill();
 		}
 		ctx.restore();
@@ -302,16 +347,16 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 			// У заблокированного звезда серая и без свечения.
 			if (star.node.isBlocked) continue;
 
-			const position = livePosition(star, now);
-			const x = camera.worldToScreenX(position.x);
-			const y = camera.worldToScreenY(position.y);
+			const { sx: x, sy: y, scale: depthScale } = project(star, now);
 			const scale = appearScale(star, now);
-			const glow = star.glow * camera.zoom * scale;
+			const glow = star.glow * depthScale * scale;
 			if (glow < 0.5) continue;
 			if (x + glow < 0 || x - glow > cssWidth || y + glow < 0 || y - glow > cssHeight) continue;
 
 			const dim = isLit(star.id) ? 1 : 1 - 0.65 * highlight;
-			ctx.globalAlpha = Math.min(1, star.bright * twinkle(star, now) * dim);
+			// Дальние звёзды тусклее ближних — вторая половина ощущения объёма.
+			const depthDim = 0.72 + 0.28 * (1 + star.depth * DEPTH_STRENGTH);
+			ctx.globalAlpha = Math.min(1, star.bright * twinkle(star, now) * dim * depthDim);
 
 			const { sprite, spriteRadius } = glowSprite(
 				star.node.gender,
@@ -330,11 +375,9 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 	function drawCores(now: number, isLit: (id: string) => boolean): void {
 		for (const star of scene.order) {
-			const position = livePosition(star, now);
-			const x = camera.worldToScreenX(position.x);
-			const y = camera.worldToScreenY(position.y);
+			const { sx: x, sy: y, scale: depthScale } = project(star, now);
 			const scale = appearScale(star, now);
-			const radius = Math.max(0.7, star.radius * camera.zoom * scale * 0.5);
+			const radius = Math.max(0.7, star.radius * depthScale * scale * 0.5);
 			if (x + radius < 0 || x - radius > cssWidth || y + radius < 0 || y - radius > cssHeight)
 				continue;
 
@@ -379,14 +422,12 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 				star.id === scene.me;
 			if (!notable) continue;
 
-			const position = livePosition(star, now);
-			const x = camera.worldToScreenX(position.x);
-			const y = camera.worldToScreenY(position.y);
+			const { sx: x, sy: y, scale: depthScale } = project(star, now);
 			if (x < -100 || x > cssWidth + 100 || y < -40 || y > cssHeight + 40) continue;
 
 			ctx.globalAlpha = isLit(star.id) ? 0.75 : 0.75 * (1 - 0.65 * highlight);
 			ctx.fillStyle = 'rgb(233, 240, 255)';
-			ctx.fillText(star.node.name, x, y + star.radius * camera.zoom + 6);
+			ctx.fillText(star.node.name, x, y + star.radius * depthScale + 6);
 		}
 		ctx.restore();
 		ctx.globalAlpha = 1;
@@ -400,6 +441,10 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 		resize();
 		camera.update(dt, scene.bounds);
+
+		// Резинки считаются, только пока есть что считать: в покое цикл
+		// физики выключен и кадр стоит ровно столько же, сколько раньше.
+		if (grab || wobbling) wobbling = stepWobble(scene, grab, dt);
 
 		// Затухание неба вокруг выбранной звезды — за 200 мс.
 		const target = selectedId ? 1 : 0;
@@ -417,6 +462,13 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 	let lastPoint = { x: 0, y: 0, t: 0 };
 	let pinchDistance = 0;
 	let lastTapAt = 0;
+	// Скорость пальца копим сглаженно: одно событие касания даёт слишком
+	// шумную оценку, и бросок получается случайным.
+	let flingX = 0;
+	let flingY = 0;
+	// Звезда под пальцем: пока не сдвинули дальше порога — это кандидат на тап,
+	// после порога — перетаскивание на резинках.
+	let candidate: Star | null = null;
 
 	function localPoint(event: PointerEvent): { x: number; y: number } {
 		const rect = canvas.getBoundingClientRect();
@@ -437,8 +489,11 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 		dragging = true;
 		moved = 0;
+		flingX = 0;
+		flingY = 0;
+		candidate = pickStar(point.x, point.y);
 		lastPoint = { ...point, t: performance.now() };
-		camera.stop();
+		camera.beginDrag();
 	}
 
 	function onPointerMove(event: PointerEvent): void {
@@ -472,13 +527,34 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		const dx = point.x - lastPoint.x;
 		const dy = point.y - lastPoint.y;
 		moved += Math.hypot(dx, dy);
+
+		// Палец начал с звезды и ушёл дальше порога — тащим её, а не карту.
+		if (candidate && moved > TAP_SLOP) {
+			if (!grab) {
+				grab = { star: candidate, worldX: 0, worldY: 0 };
+				camera.endDrag();
+				camera.stop();
+			}
+			const world = screenToWorldAtDepth(point.x, point.y, candidate.depth);
+			grab.worldX = world.x;
+			grab.worldY = world.y;
+			wobbling = true;
+			lastPoint = { ...point, t: performance.now() };
+			return;
+		}
+
 		camera.panBy(dx, dy);
 
 		const now = performance.now();
-		const dt = Math.max(1, now - lastPoint.t) / 1000;
+		const dt = Math.max(8, now - lastPoint.t) / 1000;
 		lastPoint = { ...point, t: now };
-		// Скорость для инерции: пиксели в секунду.
-		camera.throw(dx / dt, dy / dt);
+
+		// Копим скорость для броска, но саму инерцию не включаем: пока палец
+		// на экране, карту двигает только он. Иначе движение складывается
+		// с инерцией и идёт вдвое быстрее пальца — рывками.
+		const weight = 0.25;
+		flingX = flingX * (1 - weight) + (dx / dt) * weight;
+		flingY = flingY * (1 - weight) + (dy / dt) * weight;
 	}
 
 	function onPointerUp(event: PointerEvent): void {
@@ -488,8 +564,21 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 		if (!dragging) return;
 		dragging = false;
+		camera.endDrag();
 
-		if (moved > TAP_SLOP) return; // это было перетаскивание — оставляем инерцию
+		// Звезду отпустили: резинки сами вернут всех по местам.
+		if (grab) {
+			grab = null;
+			candidate = null;
+			return;
+		}
+		candidate = null;
+
+		if (moved > TAP_SLOP) {
+			// Это было перетаскивание: отпустили — карта катится дальше.
+			camera.throw(flingX, flingY);
+			return;
+		}
 		camera.stop();
 
 		const now = performance.now();

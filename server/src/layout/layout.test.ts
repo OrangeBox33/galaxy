@@ -1,12 +1,12 @@
 // Тесты раскладки — самая важная часть проверки (раздел 13 ТЗ).
 // Раскладка детерминирована, поэтому все проверки точные, без «примерно похоже».
 import { describe, expect, it } from 'vitest';
-import { computeLayout, type Point } from './index.js';
-import { LAYOUT_PARAMS as P, starRadius } from './params.js';
-import { makeNode, simulate, sunflowerPosition } from './simulate.js';
-import { computeCentrality } from './centrality.js';
-import { applyTransform, bestTransform, type Pair } from './procrustes.js';
-import { mulberry32 } from '../lib/prng.js';
+import { computeLayout, type Point } from '../../../shared/layout/index.js';
+import { LAYOUT_PARAMS as P, starRadius } from '../../../shared/layout/params.js';
+import { makeNode, simulate, sunflowerPosition } from '../../../shared/layout/simulate.js';
+import { computeCentrality } from '../../../shared/layout/centrality.js';
+import { applyTransform, bestTransform, type Pair } from '../../../shared/layout/procrustes.js';
+import { mulberry32 } from '../../../shared/prng.js';
 
 const R = P.R_MAX;
 

@@ -5,7 +5,7 @@
 //   npm run seed:demo            добавить демо-звёзды
 //   npm run seed:demo -- --wipe  сначала снести прежние тестовые
 import { db } from '../db.js';
-import { mulberry32 } from './prng.js';
+import { mulberry32 } from '../../../shared/prng.js';
 import { normalizePair } from './pair.js';
 import { recomputeLayout } from '../layout/runner.js';
 

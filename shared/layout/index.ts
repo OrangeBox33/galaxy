@@ -1,12 +1,22 @@
 // Раскладка целиком, чистой функцией: на вход граф и предыдущие координаты,
-// на выход новые. Ничего не знает про БД — поэтому её можно гонять в тестах
-// (раздел 13) сотнями прогонов.
+// на выход новые. Ничего не знает ни про БД, ни про браузер — поэтому живёт
+// в shared/ и выполняется в двух местах:
+//
+//   на сервере — в отдельном потоке, и результат ложится в базу как общая
+//     карта для всех;
+//   на клиенте — в Web Worker, сразу после своего действия, чтобы человек
+//     увидел изменение не дожидаясь сервера.
+//
+// Совпадать до последнего бита эти два расчёта не обязаны и не будут:
+// стандарт JavaScript не фиксирует точность синуса и косинуса, у разных
+// движков они чуть разные. Клиентский результат — предположение; когда
+// приходит серверный, звёзды плавно переезжают на него.
 import { computeCentrality } from './centrality.js';
 import { centerByMass, scaleToPercentile } from './normalize.js';
 import { LAYOUT_PARAMS as P } from './params.js';
 import { applyTransform, bestTransform, type Pair } from './procrustes.js';
 import { makeNode, simulate, sunflowerPosition, type SimNode } from './simulate.js';
-import { prngForId } from '../lib/prng.js';
+import { prngForId } from '../prng.js';
 
 export type Point = { x: number; y: number };
 
@@ -23,6 +33,11 @@ export type LayoutInput = {
 	full?: boolean;
 	// Тёплый пересчёт: старт с сохранённых мест, но с бюджетом полного.
 	long?: boolean;
+	// Потолок итераций. Нужен клиенту: его расчёт — предсказание, которое
+	// показывают сразу после действия, и точность ему не нужна. Короткого
+	// прогона хватает, чтобы звёзды двинулись в правильную сторону, а через
+	// несколько секунд придёт серверный результат и всё встанет на места.
+	maxIterations?: number;
 };
 
 export type LayoutResult = {
@@ -50,7 +65,10 @@ export function computeLayout(input: LayoutInput): LayoutResult {
 	placeInitial(nodes, neighbours, previous, anchors, full);
 
 	const long = full || (input.long ?? false);
-	const iterations = long ? P.FULL_ITERATIONS : P.INCREMENTAL_ITERATIONS;
+	const iterations = Math.min(
+		input.maxIterations ?? Infinity,
+		long ? P.FULL_ITERATIONS : P.INCREMENTAL_ITERATIONS,
+	);
 	simulate(nodes, input.edges, {
 		alpha: full ? P.FULL_ALPHA : P.INCREMENTAL_ALPHA,
 		iterations,

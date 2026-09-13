@@ -2,7 +2,7 @@
 // фиксированная слева внизу, на мобильных — нижняя панель во всю ширину.
 import { useState } from 'react';
 import { useStore } from '../store';
-import { invites, links } from '../api/endpoints';
+import { invites } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Avatar } from './Avatar';
 import { openShare } from '../telegram/webapp';
@@ -17,6 +17,8 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 	const selection = useStore((state) => state.selection);
 	const select = useStore((state) => state.select);
 	const refreshGraph = useStore((state) => state.refreshGraph);
+	const linkWith = useStore((state) => state.linkWith);
+	const unlinkFrom = useStore((state) => state.unlinkFrom);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -27,12 +29,14 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 		select(null);
 	};
 
-	async function run(action: () => Promise<unknown>): Promise<void> {
+	// Связать и развязать идут через хранилище: оно показывает изменение
+	// сразу, не дожидаясь, пока сервер пересчитает карту.
+	async function run(action: () => Promise<unknown>, refresh = true): Promise<void> {
 		setBusy(true);
 		setError(null);
 		try {
 			await action();
-			await refreshGraph();
+			if (refresh) await refreshGraph();
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : 'Не получилось');
 		} finally {
@@ -116,7 +120,7 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 					<button
 						className="btn btn--ghost"
 						disabled={busy}
-						onClick={() => void run(() => links.remove(node.id))}
+						onClick={() => void run(() => unlinkFrom(node.id), false)}
 					>
 						Развязать
 					</button>
@@ -124,7 +128,7 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 					<button
 						className="btn"
 						disabled={busy || node.isBlocked}
-						onClick={() => void run(() => links.create(node.id))}
+						onClick={() => void run(() => linkWith(node.id), false)}
 					>
 						Связать
 					</button>

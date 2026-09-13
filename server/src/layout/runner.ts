@@ -3,8 +3,9 @@
 import { db } from '../db.js';
 import { env } from '../env.js';
 import { log } from '../lib/log.js';
-import { computeLayout, type Point } from './index.js';
-import { LAYOUT_PARAMS } from './params.js';
+import { type Point } from '../../../shared/layout/index.js';
+import { computeLayoutInThread } from './pool.js';
+import { LAYOUT_PARAMS } from '../../../shared/layout/params.js';
 import { lastGraphChangeAt, noteGraphChanged } from './state.js';
 
 // Пересчёты не должны накладываться. Процесс pm2 ровно один, поэтому
@@ -77,7 +78,9 @@ export async function recomputeLayout(options: RecomputeOptions = {}): Promise<{
 			}
 		}
 
-		const result = computeLayout({
+		// Считаем в отдельном потоке: секунда-две расчёта не должна
+		// подвешивать ответы на запросы.
+		const result = await computeLayoutInThread({
 			ids,
 			edges,
 			previous,

@@ -42,6 +42,18 @@ export type Star = {
 	glow: number;
 	bright: number;
 	halo: RGB;
+
+	// Глубина: −1 — дальний план, +1 — ближний. Берётся из id, поэтому
+	// у каждого человека она своя и постоянная.
+	depth: number;
+
+	// Смещение от «домашнего» места и его скорость. Ими живёт только
+	// перетаскивание на резинках: серверных координат это не касается,
+	// после отпускания смещение само затухает в ноль.
+	ox: number;
+	oy: number;
+	ovx: number;
+	ovy: number;
 };
 
 export type InviteDot = {
@@ -111,13 +123,19 @@ function makeStar(node: GraphNode, now: number, isNew: boolean): Star {
 		twinkleFreq: (Math.PI * 2) / (3 + random() * 4),
 		twinklePhase: random() * Math.PI * 2,
 		halo: haloColor(node.gender, node.isBlocked),
+		// Хабы держим ближе к середине по глубине: у них и так самый большой
+		// ореол, и на переднем плане они забивали бы всё вокруг.
+		depth: (random() * 2 - 1) * (1 - 0.4 * node.centrality),
+		ox: 0,
+		oy: 0,
+		ovx: 0,
+		ovy: 0,
 		...m,
 	};
 }
 
 export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 	const first = scene.layoutVersion === -1;
-	const layoutChanged = graph.layoutVersion !== scene.layoutVersion;
 	const stars = new Map<string, Star>();
 
 	for (const node of graph.nodes) {
@@ -132,7 +150,9 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 		Object.assign(existing, metrics(node));
 		existing.halo = haloColor(node.gender, node.isBlocked);
 
-		if (layoutChanged && (existing.toX !== node.x || existing.toY !== node.y)) {
+		// Сравниваем сами координаты, а не версию раскладки: предсказанные
+		// клиентом места приходят с той же версией, что и прежние серверные.
+		if (existing.toX !== node.x || existing.toY !== node.y) {
 			// Едем из того места, где звезда находится прямо сейчас.
 			const current = starPosition(existing, now);
 			existing.fromX = current.x;
@@ -165,9 +185,11 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 
 	return {
 		stars,
-		// Порядок отрисовки стабилен: сначала тусклые, потом яркие,
-		// иначе хабы окажутся под чужими ореолами.
-		order: [...stars.values()].sort((a, b) => a.radius - b.radius),
+		// Порядок отрисовки: от дальних к ближним, а на одной глубине —
+		// от тусклых к ярким, чтобы хабы не оказались под чужими ореолами.
+		// Глубина у звезды постоянна, поэтому сортируем один раз здесь,
+		// а не в каждом кадре.
+		order: [...stars.values()].sort((a, b) => a.depth - b.depth || a.radius - b.radius),
 		edges,
 		invites,
 		neighbours,
