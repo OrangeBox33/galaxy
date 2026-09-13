@@ -78,12 +78,12 @@ const CORONA_FLICKER = [1.7, 3.1]; // секунды на цикл мерцан�
 // их место занимают самые крупные звёзды, а мелочь обходится ореолом.
 const CORONA_MAX_STARS = 40;
 
-// По связи бегут импульсы света — от звезды к звезде. Видно их только там,
-// где связь светится, поэтому импульс словно вырывается из одной звезды
-// и спустя мгновение прилетает во вторую.
-const PULSE_MIN_DEGREE = 3; // ниже этого звезде нечего излучать
-const PULSE_PERIOD = [2.4, 4.6]; // секунды на пробег
-const PULSE_SIZE = 1.5; // экранных пикселей при одной связи
+// Ближний к звезде кусок связи рисуется отдельно и толще: именно эти
+// огрызки, накладываясь друг на друга, и делают звезду с многими связями
+// заметно ярче соседей.
+const FLARE_WIDTH = 0.5; // доля радиуса звезды
+const FLARE_MIN_SCREEN = 3.5; // короче этого не рисуем: не видно
+const FLARE_MAX = 700; // предел числа огрызков за кадр
 
 const TAP_SLOP = 6; // пикселей: дальше это уже перетаскивание, а не тап
 const LABEL_ZOOM = 1.2;
@@ -395,62 +395,56 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		return gradient;
 	}
 
-	// Импульс света, бегущий по связи. Чем больше связей у звезды, тем чаще
-	// и крупнее импульсы: поток энергии виден прямо на карте.
-	function drawPulse(
-		now: number,
-		a: Star,
-		b: Star,
+	// Ближний к звезде кусок связи: короткая дуга той же формы, но толще
+	// и ярче. Возвращает 1, если нарисовали, — для счётчика.
+	function drawFlare(
 		x1: number,
 		y1: number,
-		c1x: number,
-		c1y: number,
-		c2x: number,
-		c2y: number,
 		x2: number,
 		y2: number,
-		length: number,
-		reachA: number,
-		reachB: number,
-		near: number,
-	): void {
-		if (reduced) return;
+		nx: number,
+		ny: number,
+		bend: number,
+		star: Star,
+		scale: number,
+		reach: number,
+		alpha: number,
+	): number {
+		const width = star.radius * scale * FLARE_WIDTH;
+		if (reach < FLARE_MIN_SCREEN || width < 0.9) return 0;
 
-		const degree = Math.max(a.node.degree, b.node.degree);
-		if (degree < PULSE_MIN_DEGREE || length < 4) return;
+		const length = Math.hypot(x2 - x1, y2 - y1);
+		if (length < 1) return 0;
 
-		// Импульс летит от той звезды, что мощнее.
-		const forward = a.node.degree >= b.node.degree;
-		const key = forward ? a.id + b.id : b.id + a.id;
-		const period =
-			PULSE_PERIOD[0] + (PULSE_PERIOD[1] - PULSE_PERIOD[0]) * fraction(key, 3);
-		const progress = ((now / 1000 / period) + fraction(key, 4)) % 1;
-		const t = forward ? progress : 1 - progress;
+		// Доля связи, которую занимает огрызок, и та же кривизна, что у линии.
+		const t = Math.min(0.5, reach / length);
+		const ex = x1 + (x2 - x1) * t;
+		const ey = y1 + (y2 - y1) * t;
+		const cx = x1 + (x2 - x1) * t * 0.5 + nx * bend * t * 1.5;
+		const cy = y1 + (y2 - y1) * t * 0.5 + ny * bend * t * 1.5;
 
-		// Видно импульс только там, где светится сама связь: в середине
-		// он гаснет и появляется снова уже у второй звезды.
-		const fromStart = t * length;
-		const fromEnd = (1 - t) * length;
-		const visible = Math.max(
-			1 - fromStart / Math.max(1, reachA),
-			1 - fromEnd / Math.max(1, reachB),
-		);
-		if (visible <= 0) return;
+		const gradient = ctx.createLinearGradient(x1, y1, ex, ey);
+		gradient.addColorStop(0, rgba(star.halo, alpha * 0.9));
+		gradient.addColorStop(0.55, rgba(star.halo, alpha * 0.4));
+		gradient.addColorStop(1, rgba(star.halo, 0));
 
-		const px = bezier(t, x1, c1x, c2x, x2);
-		const py = bezier(t, y1, c1y, c2y, y2);
-		const size = PULSE_SIZE * (1 + Math.min(1.4, degree * 0.05)) * Math.max(0.6, camera.zoom);
-
-		ctx.fillStyle = rgba(forward ? a.halo : b.halo, Math.min(0.85, near * 2.2 * visible));
+		ctx.save();
+		ctx.lineWidth = width;
+		ctx.lineCap = 'round';
+		ctx.strokeStyle = gradient;
 		ctx.beginPath();
-		ctx.arc(px, py, size * visible, 0, Math.PI * 2);
-		ctx.fill();
+		ctx.moveTo(x1, y1);
+		ctx.quadraticCurveTo(cx, cy, ex, ey);
+		ctx.stroke();
+		ctx.restore();
+		return 1;
 	}
 
 	function drawEdges(now: number, isLit: (id: string) => boolean): void {
 		ctx.save();
 		ctx.globalCompositeOperation = 'lighter';
 		ctx.lineWidth = 0.8;
+		let flares = 0;
 
 		for (const [a, b] of scene.edges) {
 			const pa = project(a, now);
@@ -473,9 +467,9 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 				}
 			}
 
-			const both = isLit(a.id) && isLit(b.id);
 			const incident =
 				selectedId !== null && (a.id === selectedId || b.id === selectedId);
+			const both = isLit(a.id) && isLit(b.id);
 			// Выбранную звезду и её соседей показываем целиком: там связи
 			// важнее красоты, их нужно видеть по всей длине.
 			const base = edgeMode === 'full' ? EDGE_ALPHA_PLAIN : EDGE_ALPHA_NEAR;
@@ -492,8 +486,11 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 			// поэтому связь выходит из звезды дугой и так же входит в другую.
 			const nx = length > 0 ? -(y2 - y1) / length : 0;
 			const ny = length > 0 ? (x2 - x1) / length : 0;
-			const bendA = bendAmount(a, length, now, 1);
-			const bendB = -bendAmount(b, length, now, 2);
+			// Сплошной режим и связи выбранной звезды не шевелятся: на них
+			// смотрят, чтобы разобраться, кто с кем знаком, а не любоваться.
+			const still = edgeMode === 'full' || incident;
+			const bendA = still ? 0 : bendAmount(a, length, now, 1);
+			const bendB = still ? 0 : -bendAmount(b, length, now, 2);
 
 			const c1x = x1 + (x2 - x1) / 3 + nx * bendA;
 			const c1y = y1 + (y2 - y1) / 3 + ny * bendA;
@@ -505,7 +502,12 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 			ctx.bezierCurveTo(c1x, c1y, c2x, c2y, x2, y2);
 			ctx.stroke();
 
-			drawPulse(now, a, b, x1, y1, c1x, c1y, c2x, c2y, x2, y2, length, reachA, reachB, near);
+			// Огрызки у звёзд — поверх тонкой линии, своей толщиной.
+			if (!incident && flares < FLARE_MAX) {
+				flares += drawFlare(x1, y1, x2, y2, nx, ny, bendA, a, pa.scale, reachA, near);
+				flares += drawFlare(x2, y2, x1, y1, -nx, -ny, bendB, b, pb.scale, reachB, near);
+			}
+
 		}
 		ctx.restore();
 	}
