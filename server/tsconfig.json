@@ -1,0 +1,22 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2022"],
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"outDir": "./dist",
+		// rootDir — корень репозитория: в сборку попадает и server/src, и общий shared/.
+		// На сервер уезжает дерево ровно в том виде, в каком его собрал tsc:
+		// dist/server/src/*.js рядом с dist/shared/*.js, относительные импорты сходятся.
+		"rootDir": "..",
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"declaration": false,
+		"sourceMap": false
+	},
+	"include": ["src/**/*.ts", "../shared/**/*.ts"],
+	"exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}

@@ -1,0 +1,6 @@
+{
+	"name": "galaxy-shared",
+	"private": true,
+	"//": "Только чтобы tsc и node считали общий код ES-модулями: ближайший package.json определяет формат файла.",
+	"type": "module"
+}

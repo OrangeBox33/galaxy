@@ -1,0 +1,128 @@
+// Схема данных «Galaxy». Раздел 3 ТЗ.
+// BigInt-идентификаторы равны Telegram user id; в JSON они всегда отдаются строками.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNSPECIFIED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+enum OutboxStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model User {
+  id                BigInt  @id // = Telegram user id; тестовые — отрицательные
+  telegramUsername  String?
+  telegramFirstName String?
+  telegramLastName  String?
+  languageCode      String?
+
+  customName        String? // имя, заданное пользователем
+  nameLockedByAdmin Boolean @default(false) // админ переименовал → пользователь менять не может
+  age               Int? // 5..120, заполняется только вручную
+  gender            Gender  @default(UNSPECIFIED)
+
+  avatarFile      String? // "<id>-<hash>.webp" внутри AVATAR_DIR
+  avatarFetchedAt DateTime?
+
+  isTest    Boolean @default(false)
+  isBlocked Boolean @default(false) // не пускаем в приложение, звезда гаснет
+
+  // Кэш раскладки: координаты считает сервер (раздел 7), клиент их только анимирует.
+  x          Float @default(0)
+  y          Float @default(0)
+  degree     Int   @default(0) // денормализованная степень (подтверждённые связи)
+  centrality Float @default(0) // [0..1], результат раздела 7.1
+
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  linksA          Link[]   @relation("LinkA")
+  linksB          Link[]   @relation("LinkB")
+  invitesSent     Invite[] @relation("Inviter")
+  invitesAccepted Invite[] @relation("Acceptor")
+
+  @@index([isTest])
+}
+
+// Ненаправленная связь. Инвариант: aId < bId. Все существующие связи — подтверждённые.
+model Link {
+  id          String   @id @default(cuid())
+  aId         BigInt
+  bId         BigInt
+  a           User     @relation("LinkA", fields: [aId], references: [id], onDelete: Cascade)
+  b           User     @relation("LinkB", fields: [bId], references: [id], onDelete: Cascade)
+  createdById BigInt? // кто инициировал; null = создана админом/системой
+  createdAt   DateTime @default(now())
+
+  @@unique([aId, bId])
+  @@index([aId])
+  @@index([bId])
+}
+
+// Приглашение = «тусклая точка». Видна ТОЛЬКО пригласившему.
+model Invite {
+  id           String       @id @default(cuid())
+  token        String       @unique // 22 символа base64url из 16 случайных байт
+  inviterId    BigInt
+  inviter      User         @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  label        String? // как пригласивший подписал точку: «Вася с работы»
+  status       InviteStatus @default(PENDING)
+  acceptedById BigInt?
+  acceptedBy   User?        @relation("Acceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  acceptedAt   DateTime?
+
+  @@index([inviterId, status])
+}
+
+// Исходящие сообщения бота. Нужен, потому что отправка может упасть
+// (пользователь не начинал диалог с ботом или заблокировал его).
+model BotOutbox {
+  id        String       @id @default(cuid())
+  userId    BigInt
+  kind      String // "invite_accepted" | "linked"
+  text      String
+  status    OutboxStatus @default(QUEUED)
+  attempts  Int          @default(0)
+  lastError String?
+  createdAt DateTime     @default(now())
+  sentAt    DateTime?
+
+  @@index([status, createdAt])
+}
+
+model AdminAudit {
+  id        String   @id @default(cuid())
+  adminId   BigInt
+  action    String // "rename" | "delete_user" | "create_test" | ...
+  targetId  String
+  details   Json?
+  createdAt DateTime @default(now())
+}
+
+model LayoutState {
+  id         Int      @id @default(1) // singleton-строка
+  version    Int      @default(0)
+  computedAt DateTime @default(now())
+  params     Json // снимок коэффициентов из раздела 7
+  dirty      Boolean  @default(false)
+}
