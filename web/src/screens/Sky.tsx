@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { GRAPH_POLL_MS } from '../../../shared/config';
 import { useStore } from '../store';
-import { createRenderer, type Renderer } from '../canvas/renderer';
+import { createRenderer, type EdgeMode, type Renderer } from '../canvas/renderer';
 import { StarCard } from '../components/StarCard';
 import { ProfileSheet } from '../components/ProfileSheet';
 import { InviteSheet } from '../components/InviteSheet';
@@ -21,6 +21,10 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 
 	const [showProfile, setShowProfile] = useState(false);
 	const [showInvite, setShowInvite] = useState(false);
+	// Выбор режима связей запоминаем: человек настроил под себя один раз.
+	const [edgeMode, setEdgeMode] = useState<EdgeMode>(
+		() => (localStorage.getItem('galaxy:edges') as EdgeMode | null) ?? 'glow',
+	);
 
 	// Первый вход: экран профиля поверх карты, но его можно пропустить.
 	useEffect(() => {
@@ -62,6 +66,11 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 		rendererRef.current?.setSelection(selection?.kind === 'node' ? selection.id : null);
 	}, [selection]);
 
+	useEffect(() => {
+		rendererRef.current?.setEdgeMode(edgeMode);
+		localStorage.setItem('galaxy:edges', edgeMode);
+	}, [edgeMode]);
+
 	// Аватарки прогреваем после первой отрисовки карты, порциями по 8:
 	// к первому наведению они уже в кеше браузера.
 	useEffect(() => {
@@ -93,6 +102,13 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 			<div className="sky__top">
 				<button className="chip" onClick={() => setShowInvite(true)}>
 					Позвать друга
+				</button>
+				<button
+					className="chip"
+					title="Как рисовать связи"
+					onClick={() => setEdgeMode(edgeMode === 'glow' ? 'full' : 'glow')}
+				>
+					{edgeMode === 'glow' ? 'Связи: у звёзд' : 'Связи: целиком'}
 				</button>
 				{profile?.isAdmin && (
 					<button className="chip" onClick={onOpenAdmin}>

@@ -23,6 +23,11 @@ export type Pick =
 	| { kind: 'invite'; id: string }
 	| { kind: 'empty' };
 
+// Как рисовать связи:
+//   'glow'  — линия светится только рядом со звёздами, вдали гаснет;
+//   'full'  — сплошные линии по всей длине, как на обычном графе.
+export type EdgeMode = 'glow' | 'full';
+
 export type RendererHandlers = {
 	onPick: (pick: Pick) => void;
 	onHover: (id: string | null) => void;
@@ -38,6 +43,16 @@ const HIT_PAD_MIN_SCREEN = 14;
 // дальних. Это не настоящее 3D, а параллакс — но объём читается именно так.
 const DEPTH_STRENGTH = 0.22;
 
+// Линия светится только рядом со звездой — на столько её радиусов,
+// а дальше гаснет. Так плотные места остаются паутиной света, а длинные
+// перемычки между далёкими звёздами перестают затягивать небо сеткой.
+const EDGE_GLOW_RADII = 2.5;
+// Яркость линии вплотную к звезде и вдали от любой звезды.
+const EDGE_ALPHA_NEAR = 0.34;
+const EDGE_ALPHA_FAR = 0.015;
+// Яркость в сплошном режиме: линий видно много, поэтому каждая тусклее.
+const EDGE_ALPHA_PLAIN = 0.22;
+
 const TAP_SLOP = 6; // пикселей: дальше это уже перетаскивание, а не тап
 const LABEL_ZOOM = 1.2;
 
@@ -51,6 +66,7 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 	let cssWidth = 0;
 	let cssHeight = 0;
 
+	let edgeMode: EdgeMode = 'glow';
 	let selectedId: string | null = null;
 	let hoveredId: string | null = null;
 	// Плавность подсветки: 0 — обычное небо, 1 — всё лишнее притушено.
@@ -98,6 +114,10 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 	function setSelection(id: string | null): void {
 		selectedId = id;
+	}
+
+	function setEdgeMode(mode: EdgeMode): void {
+		edgeMode = mode;
 	}
 
 	function focusOn(id: string, zoom?: number): void {
@@ -260,6 +280,45 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		ctx.restore();
 	}
 
+	// Яркость вдоль линии: у концов — плато, дальше обрыв. Обрыв, а не плавный
+	// спуск: иначе вместо звёзд с лучами получается всё та же паутина,
+	// только тусклее.
+	function edgeGradient(
+		x1: number,
+		y1: number,
+		x2: number,
+		y2: number,
+		a: Star,
+		b: Star,
+		length: number,
+		reachA: number,
+		reachB: number,
+		near: number,
+		far: number,
+	): CanvasGradient | string {
+		const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+
+		// Сплошной режим и случай, когда звёзды и так рядом, — светится
+		// вся линия целиком.
+		if (edgeMode === 'full' || length < 1 || reachA + reachB >= length) {
+			gradient.addColorStop(0, rgba(a.halo, near));
+			gradient.addColorStop(1, rgba(b.halo, near));
+			return gradient;
+		}
+
+		const endA = reachA / length;
+		const endB = 1 - reachB / length;
+
+		gradient.addColorStop(0, rgba(a.halo, near));
+		// Плато держим до двух третей досягаемости, потом резкий спуск.
+		gradient.addColorStop(endA * 0.66, rgba(a.halo, near * 0.85));
+		gradient.addColorStop(endA, rgba(a.halo, far));
+		gradient.addColorStop(endB, rgba(b.halo, far));
+		gradient.addColorStop(endB + (1 - endB) * 0.34, rgba(b.halo, near * 0.85));
+		gradient.addColorStop(1, rgba(b.halo, near));
+		return gradient;
+	}
+
 	function drawEdges(now: number, isLit: (id: string) => boolean): void {
 		ctx.save();
 		ctx.globalCompositeOperation = 'lighter';
@@ -289,12 +348,17 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 			const both = isLit(a.id) && isLit(b.id);
 			const incident =
 				selectedId !== null && (a.id === selectedId || b.id === selectedId);
-			const alpha = incident ? 0.5 : both ? 0.22 : 0.22 * (1 - 0.65 * highlight);
+			// Выбранную звезду и её соседей показываем целиком: там связи
+			// важнее красоты, их нужно видеть по всей длине.
+			const base = edgeMode === 'full' ? EDGE_ALPHA_PLAIN : EDGE_ALPHA_NEAR;
+			const near = incident ? 0.5 : both ? base : base * (1 - 0.65 * highlight);
+			const far = incident ? 0.5 : EDGE_ALPHA_FAR;
 
-			const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-			gradient.addColorStop(0, rgba(a.halo, alpha));
-			gradient.addColorStop(1, rgba(b.halo, alpha));
-			ctx.strokeStyle = gradient;
+			const length = Math.hypot(x2 - x1, y2 - y1);
+			const reachA = a.radius * pa.scale * EDGE_GLOW_RADII;
+			const reachB = b.radius * pb.scale * EDGE_GLOW_RADII;
+
+			ctx.strokeStyle = edgeGradient(x1, y1, x2, y2, a, b, length, reachA, reachB, near, far);
 			ctx.beginPath();
 			ctx.moveTo(x1, y1);
 			ctx.lineTo(x2, y2);
@@ -618,6 +682,7 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		camera,
 		setGraph,
 		setSelection,
+		setEdgeMode,
 		focusOn,
 		focusOnMe: () => focusOn(scene.me),
 		zoomBy: (factor: number) => camera.zoomAt(factor, cssWidth / 2, cssHeight / 2),

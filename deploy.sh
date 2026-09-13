@@ -9,7 +9,14 @@
 #   ./deploy.sh --status     что крутится на сервере
 #   ./deploy.sh --restart    перезапустить, ничего не собирая
 #   ./deploy.sh --no-build   залить уже собранное
+#   ./deploy.sh --fast       не ставить зависимости и не трогать миграции
+#   ./deploy.sh --full       поставить зависимости и накатить миграции принудительно
 #   ./deploy.sh --dry-run    показать, что бы залилось
+#
+# По умолчанию тяжёлые шаги выполняются, только если для них что-то изменилось:
+# зависимости — при изменении package-lock.json, генерация клиента Prisma —
+# при изменении schema.prisma, миграции — при появлении новых файлов миграций.
+# Слепки этих файлов хранятся на сервере, поэтому обычный выкат занимает секунды.
 #
 # Раскладка на сервере:
 #   /root/dev/galaxy/
@@ -41,6 +48,8 @@ REMOTE_ENV='export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR
 BUILD=1
 DRY_RUN=0
 MODE="deploy"
+# auto — решать по контрольным суммам, fast — пропустить всё, full — сделать всё.
+HEAVY="auto"
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 ok() { printf '\033[1;32m    %s\033[0m\n' "$*"; }
@@ -60,9 +69,11 @@ while [ $# -gt 0 ]; do
 		--status) MODE="status" ;;
 		--restart) MODE="restart" ;;
 		--no-build) BUILD=0 ;;
+		--fast) HEAVY="fast" ;;
+		--full) HEAVY="full" ;;
 		--dry-run) DRY_RUN=1 ;;
 		-h | --help)
-			sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+			sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 			exit 0
 			;;
 		*) die "неизвестный аргумент: $1" ;;
@@ -208,14 +219,63 @@ fi
 say "Заливаю на $REMOTE:$REMOTE_DIR"
 rsync "${RSYNC_OPTS[@]}" "$STAGE/" "$REMOTE:$REMOTE_DIR/"
 
-say "Ставлю зависимости на сервере"
-remote "cd $REMOTE_DIR && npm install --omit=dev --no-audit --no-fund" | tail -3
+# ── Тяжёлые шаги: только если для них что-то изменилось ────────────────
+# Слепок того, что уже сделано на сервере, лежит вне dist — rsync его не трогает.
+STATE_FILE="$REMOTE_HOME_DIR/.deploy-state"
+
+hash_file() { shasum -a 256 "$1" | cut -d' ' -f1; }
+hash_dir() {
+	find "$1" -type f | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 | cut -d' ' -f1
+}
+
+LOCK_HASH="$(hash_file "$ROOT/server/package-lock.json")"
+SCHEMA_HASH="$(hash_file "$ROOT/server/prisma/schema.prisma")"
+MIGRATIONS_HASH="$(hash_dir "$ROOT/server/prisma/migrations")"
+
+REMOTE_STATE="$(ssh "$REMOTE" "cat $STATE_FILE 2>/dev/null || true")"
+state_value() { printf '%s\n' "$REMOTE_STATE" | sed -n "s/^$1=//p" | head -1; }
+
+NEED_INSTALL=0
+NEED_GENERATE=0
+NEED_MIGRATE=0
+
+case "$HEAVY" in
+	full)
+		NEED_INSTALL=1
+		NEED_MIGRATE=1
+		;;
+	fast) ;;
+	*)
+		[ "$(state_value lock)" = "$LOCK_HASH" ] || NEED_INSTALL=1
+		[ "$(state_value schema)" = "$SCHEMA_HASH" ] || NEED_GENERATE=1
+		[ "$(state_value migrations)" = "$MIGRATIONS_HASH" ] || NEED_MIGRATE=1
+		;;
+esac
+
+if [ "$NEED_INSTALL" = "1" ]; then
+	say "Ставлю зависимости на сервере"
+	# postinstall тут же сгенерирует клиент Prisma, отдельный шаг не нужен.
+	remote "cd $REMOTE_DIR && npm install --omit=dev --no-audit --no-fund" | tail -3
+elif [ "$NEED_GENERATE" = "1" ]; then
+	say "Обновляю клиент Prisma (схема изменилась)"
+	remote "cd $REMOTE_DIR && npx prisma generate" | tail -2
+else
+	ok "зависимости не менялись — пропускаю"
+fi
 
 # Миграции строго до перезапуска: перезапускать процесс на непринятой схеме
 # бессмысленно. Если migrate deploy упал — прерываемся, не трогая pm2,
 # и на сервере продолжает работать старая версия.
-say "Накатываю миграции"
-remote "cd $REMOTE_DIR && npx prisma migrate deploy" | tail -5
+if [ "$NEED_MIGRATE" = "1" ]; then
+	say "Накатываю миграции"
+	remote "cd $REMOTE_DIR && npx prisma migrate deploy" | tail -5
+else
+	ok "новых миграций нет — пропускаю"
+fi
+
+# Слепок пишем только после успеха: если что-то упало выше, скрипт уже вышел
+# по set -e, и в следующий раз шаг повторится.
+remote "printf 'lock=%s\nschema=%s\nmigrations=%s\n' '$LOCK_HASH' '$SCHEMA_HASH' '$MIGRATIONS_HASH' > $STATE_FILE"
 
 say "Перезапускаю $APP_NAME"
 remote "cd $REMOTE_DIR && pm2 startOrRestart ecosystem.config.cjs --update-env >/dev/null && pm2 save >/dev/null && pm2 list"
