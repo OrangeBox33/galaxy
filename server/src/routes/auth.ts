@@ -1,6 +1,7 @@
 // Вход через Telegram Mini App (раздел 4). Никаких паролей и форм:
 // приложение открывается внутри Telegram и получает подписанный initData.
 import { Router } from 'express';
+import { randomFlame } from '../lib/flame.js';
 import { db } from '../db.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { str, body as reqBody } from '../lib/validate.js';
@@ -36,6 +37,8 @@ export function authRouter(): Router {
 					where: { id: tg.id },
 					create: {
 						id: tg.id,
+						// Множитель языков пламени выдаётся один раз, здесь.
+						flame: randomFlame(),
 						telegramUsername: tg.username,
 						telegramFirstName: sanitizeIncoming(tg.firstName),
 						telegramLastName: sanitizeIncoming(tg.lastName),

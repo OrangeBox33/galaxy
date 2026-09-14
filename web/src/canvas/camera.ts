@@ -40,6 +40,10 @@ export class Camera {
 	// размером с экран; на карте в 2000 единиц «целиком» — это меньше 0.35.
 	private minZoom = 0.05;
 
+	// Потолок приближения. По умолчанию из ТЗ; песочница поднимает его,
+	// чтобы разглядывать одну звезду вблизи.
+	maxZoom = MAX_ZOOM;
+
 	// Пока палец на экране, к границам не притягиваем: за край можно вытащить,
 	// но с сопротивлением, и после отпускания карта сама вернётся.
 	private dragging = false;
@@ -157,7 +161,7 @@ export class Camera {
 	zoomAt(factor: number, screenX: number, screenY: number): void {
 		const worldX = this.screenToWorldX(screenX);
 		const worldY = this.screenToWorldY(screenY);
-		const next = Math.min(MAX_ZOOM, Math.max(this.minZoom, this.zoom * factor));
+		const next = Math.min(this.maxZoom, Math.max(this.minZoom, this.zoom * factor));
 		if (next === this.zoom) return;
 
 		this.zoom = next;
@@ -177,7 +181,7 @@ export class Camera {
 			toX: worldX,
 			toY: worldY,
 			fromZoom: this.zoom,
-			toZoom: Math.min(MAX_ZOOM, Math.max(this.minZoom, zoom ?? this.zoom)),
+			toZoom: Math.min(this.maxZoom, Math.max(this.minZoom, zoom ?? this.zoom)),
 			start: performance.now(),
 			duration,
 		};

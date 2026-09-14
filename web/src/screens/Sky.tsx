@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { GRAPH_POLL_MS } from '../../../shared/config';
 import { useStore } from '../store';
-import { createRenderer, type EdgeMode, type Renderer } from '../canvas/renderer';
+import { EDGES_HIDDEN, createRenderer, type EdgeMode, type Renderer } from '../canvas/renderer';
 import { StarCard } from '../components/StarCard';
 import { ProfileSheet } from '../components/ProfileSheet';
 import { InviteSheet } from '../components/InviteSheet';
@@ -103,13 +103,16 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 				<button className="chip" onClick={() => setShowInvite(true)}>
 					Позвать друга
 				</button>
-				<button
-					className="chip"
-					title="Как рисовать связи"
-					onClick={() => setEdgeMode(edgeMode === 'glow' ? 'full' : 'glow')}
-				>
-					{edgeMode === 'glow' ? 'Связи: у звёзд' : 'Связи: целиком'}
-				</button>
+				{/* Пока связи скрыты, переключателю режима нечем управлять. */}
+				{!EDGES_HIDDEN && (
+					<button
+						className="chip"
+						title="Как рисовать связи"
+						onClick={() => setEdgeMode(edgeMode === 'glow' ? 'full' : 'glow')}
+					>
+						{edgeMode === 'glow' ? 'Связи: у звёзд' : 'Связи: целиком'}
+					</button>
+				)}
 				{profile?.isAdmin && (
 					<button className="chip" onClick={onOpenAdmin}>
 						Админка

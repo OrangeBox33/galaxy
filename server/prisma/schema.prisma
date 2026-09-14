@@ -43,6 +43,11 @@ model User {
   avatarFile      String? // "<id>-<hash>.webp" внутри AVATAR_DIR
   avatarFetchedAt DateTime?
 
+  // Сколько языков пламени у звезды, в долях общего правила: 0.55…1 с шагом
+  // 0.05. Достаётся человеку один раз при первом входе и больше не меняется —
+  // поэтому два одинаковых по числу связей солнца горят всё-таки по-своему.
+  flame Float @default(1)
+
   isTest    Boolean @default(false)
   isBlocked Boolean @default(false) // не пускаем в приложение, звезда гаснет
 

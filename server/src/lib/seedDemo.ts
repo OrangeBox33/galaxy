@@ -5,6 +5,7 @@
 //   npm run seed:demo            добавить демо-звёзды
 //   npm run seed:demo -- --wipe  сначала снести прежние тестовые
 import { db } from '../db.js';
+import { randomFlame } from './flame.js';
 import { mulberry32 } from '../../../shared/prng.js';
 import { normalizePair } from './pair.js';
 import { recomputeLayout } from '../layout/runner.js';
@@ -57,6 +58,7 @@ async function main(): Promise<void> {
 				id,
 				customName: `${first} ${last}${female ? 'а' : ''}`,
 				gender: female ? 'FEMALE' : 'MALE',
+				flame: randomFlame(),
 				age: 18 + Math.floor(random() * 30),
 				isTest: true,
 			},

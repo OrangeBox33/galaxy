@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>Galaxy — песочница звёзд</title>
+	</head>
+	<body>
+		<!--
+			Песочница для отладки рендера: то же небо и тот же createRenderer,
+			но без Telegram, без сервера и без базы. Открывается на
+			http://localhost:3006/galaxy/sandbox.html (npm run dev в web/).
+			В сборку не попадает: vite собирает только index.html.
+		-->
+		<div id="root" class="sky"><canvas id="sky" class="sky__canvas"></canvas></div>
+		<script type="module" src="/src/sandbox.ts"></script>
+	</body>
+</html>

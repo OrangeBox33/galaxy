@@ -19,6 +19,7 @@
 //
 //   node server/src/lib/seedScenario.js [ваш telegram id]
 import { db } from '../db.js';
+import { randomFlame } from './flame.js';
 import { env } from '../env.js';
 import { mulberry32 } from '../../../shared/prng.js';
 import { normalizePair } from './pair.js';
@@ -169,6 +170,7 @@ async function main(): Promise<void> {
 			id: row.id,
 			customName: row.name,
 			gender: row.gender,
+			flame: randomFlame(),
 			age: row.age,
 			isTest: row.isTest,
 		})),

@@ -4,6 +4,9 @@
 import type { Graph, GraphNode, PendingInvite } from '../api/types';
 import { haloColor, type RGB } from './palette';
 import { randomFor } from './prng';
+// Радиус звезды живёт в общем коде: им же раскладка разводит звёзды,
+// чтобы крупные не налезали на соседей.
+import { starRadius } from '../../../shared/layout/params';
 
 // Переезд при пересчёте раскладки — 1200 мс, никаких телепортаций (8.4).
 const MOVE_MS = 1200;
@@ -35,12 +38,11 @@ export type Star = {
 	freqY: number;
 	phaseX: number;
 	phaseY: number;
-	twinkleFreq: number;
 	twinklePhase: number;
 
 	radius: number;
-	glow: number;
-	bright: number;
+	// Личный множитель числа языков: приходит с сервера, за человеком навсегда.
+	flame: number;
 	halo: RGB;
 
 	// Глубина: −1 — дальний план, +1 — ближний. Берётся из id, поэтому
@@ -92,19 +94,8 @@ export function emptyScene(): Scene {
 	};
 }
 
-// Размер и яркость звезды (раздел 8.2), в мировых единицах.
-function metrics(node: GraphNode): { radius: number; glow: number; bright: number } {
-	const radius = Math.min(Math.max(1.8 + 2.2 * Math.sqrt(node.degree), 1.8), 14);
-	return {
-		radius,
-		glow: radius * 4.5,
-		bright: 0.55 + 0.45 * node.centrality,
-	};
-}
-
 function makeStar(node: GraphNode, now: number, isNew: boolean): Star {
 	const random = randomFor(node.id);
-	const m = metrics(node);
 	return {
 		id: node.id,
 		node,
@@ -122,18 +113,17 @@ function makeStar(node: GraphNode, now: number, isNew: boolean): Star {
 		freqY: (Math.PI * 2) / (8 + random() * 12),
 		phaseX: random() * Math.PI * 2,
 		phaseY: random() * Math.PI * 2,
-		// Мерцание: период 3–7 секунд.
-		twinkleFreq: (Math.PI * 2) / (3 + random() * 4),
 		twinklePhase: random() * Math.PI * 2,
 		halo: haloColor(node.gender, node.isBlocked),
-		// Хабы держим ближе к середине по глубине: у них и так самый большой
-		// ореол, и на переднем плане они забивали бы всё вокруг.
+		// Хабы держим ближе к середине по глубине: они и так самые крупные,
+		// и на переднем плане забивали бы всё вокруг.
 		depth: (random() * 2 - 1) * (1 - 0.4 * node.centrality),
 		ox: 0,
 		oy: 0,
 		ovx: 0,
 		ovy: 0,
-		...m,
+		radius: starRadius(node.degree),
+		flame: node.flame,
 	};
 }
 
@@ -150,7 +140,8 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 		}
 
 		existing.node = node;
-		Object.assign(existing, metrics(node));
+		existing.radius = starRadius(node.degree);
+		existing.flame = node.flame;
 		existing.halo = haloColor(node.gender, node.isBlocked);
 
 		// Сравниваем сами координаты, а не версию раскладки: предсказанные

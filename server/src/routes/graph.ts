@@ -35,6 +35,7 @@ export function graphRouter(): Router {
 					gender: user.gender,
 					age: user.age,
 					degree: user.degree,
+					flame: user.flame,
 					centrality: user.centrality,
 					x: user.x,
 					y: user.y,

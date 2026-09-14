@@ -4,8 +4,17 @@ import type { Graph } from '../api/types';
 import { clamp01, easeInOutCubic, easeOutBack, prefersReducedMotion } from './animate';
 import { Camera } from './camera';
 import { DUST_PARALLAX, DUST_TILE_SIZE, dustTile } from './dust';
-import { CORE, SKY_BOTTOM, SKY_MID, SKY_TOP, rgb, rgba, type RGB } from './palette';
-import { glowSprite, resetSprites } from './sprites';
+import {
+	CORE,
+	CORE_RGB,
+	SKY_BOTTOM,
+	SKY_MID,
+	SKY_TOP,
+	mix,
+	rgb,
+	rgba,
+	type RGB,
+} from './palette';
 import {
 	APPEAR_DURATION,
 	DRAW_EDGE_MS,
@@ -22,6 +31,12 @@ export type Pick =
 	| { kind: 'node'; id: string }
 	| { kind: 'invite'; id: string }
 	| { kind: 'empty' };
+
+// Связи скрыты целиком. Огрызки связей у звезды (drawFlare) складывались
+// в несимметричное свечение: если соседи собрались слева, звезда «светила»
+// налево, и венец переставал быть ровным. Код связей цел — чтобы вернуть их,
+// достаточно поставить здесь false.
+export const EDGES_HIDDEN = true;
 
 // Как рисовать связи:
 //   'glow'  — линия светится только рядом со звёздами, вдали гаснет;
@@ -62,33 +77,112 @@ const BEND_PER_LINK = 0.012; // прибавка за каждую следую�
 const BEND_MAX = 0.32;
 const BEND_PERIOD = [7, 14]; // секунды, от и до
 
-// ── Корона ─────────────────────────────────────────────────────────────
-// Вокруг звезды — венец из языков пламени: плотный слой коротких у самого ядра
-// и длинные сужающиеся поверх. Языки мерцают по длине и слегка подвёрнуты
-// в одну сторону, отчего венец кажется вращающимся потоком. Чем больше связей,
-// тем языков больше и тем они длиннее.
-const CORONA_MIN_SCREEN = 7; // короче этого в пикселях венец не рисуем: не разглядеть
-const CORONA_TONGUES = [14, 44]; // языков при минимуме и максимуме связей
-const CORONA_DEGREE_FULL = 26; // при скольких связях венец в полную силу
-const CORONA_LENGTH = 0.6; // длина языка от радиуса свечения
-const CORONA_SWEEP = 0.16; // подворот языка, радианы
-const CORONA_SPIN = 90; // секунд на полный оборот венца
-const CORONA_FLICKER = [1.7, 3.1]; // секунды на цикл мерцания
-// Больше этого числа венцов за кадр не рисуем: при сильном приближении
-// их место занимают самые крупные звёзды, а мелочь обходится ореолом.
+// ── Венец ──────────────────────────────────────────────────────────────
+// Вокруг звезды — языки пламени, срисованные с солнца из референса
+// (placidplace-sun-6751_128.gif в корне репозитория). Свечение звезды —
+// не шар вокруг неё, а мягкая копия тех же языков: свет идёт от пламени.
+//
+// Языков немного, и с размером звезды их число растёт еле-еле: у звезды
+// с одной связью двенадцать, у звезды с 25 связями пятнадцать-шестнадцать.
+// Между этими точками — прямая по радиусу, дальше она же продолжается.
+// Плотность на единицу окружности при этом падает, то есть у большой звезды
+// язык получается шире — так и задумано.
+const CORONA_TONGUES_AT = [
+	{ radius: 4.0, tongues: 12 }, // звезда с одной связью
+	{ radius: 12.8, tongues: 15.5 }, // звезда с 25 связями
+];
+const CORONA_TONGUES_MIN = 8;
+const CORONA_TONGUES_MAX = 24;
+// Мельче этого в пикселях венец не рисуем: языки всё равно не разглядеть.
+const CORONA_MIN_SCREEN = 7;
+// Сколько венцов рисуем за кадр: при сильном приближении их место занимают
+// самые крупные звёзды, а мелочь обходится точкой.
 const CORONA_MAX_STARS = 40;
 
-// Ближний к звезде кусок связи рисуется отдельно и толще: именно эти
-// огрызки, накладываясь друг на друга, и делают звезду с многими связями
-// заметно ярче соседей.
+// Личный множитель числа языков приходит с сервера (User.flame): 0.55…1,
+// выдаётся при первом входе и закреплён за человеком навсегда.
+export type Flame = {
+	tongues: number; // общий множитель числа языков поверх личного
+	from: number; // начало языка, в радиусах звезды
+	length: number; // длина сверх радиуса звезды
+	width: number; // ширина у основания, в долях углового шага
+	taper: number; // насколько язык пузатый: 0 — острый клин, 1 — лепесток
+	sweep: number; // подворот острия вбок, радианы
+	bow: number; // где приходится изгиб: 0 — у основания, 1 — у острия
+	alpha: number; // яркость
+	plateau: number; // доля длины, на которой язык держит яркость
+	flicker: number; // насколько гуляет длина: 0 — стоит, 1 — от нуля до полной
+	flickerSpeed: number; // секунд на цикл мерцания
+	spin: number; // секунд на оборот венца, 0 — не вращается
+	// Мягкая копия языков — она и есть свечение звезды.
+	soft: number; // её яркость от яркости языков, 0 — нет
+	softWidth: number; // во сколько раз она шире и длиннее
+	softShift: number; // перенос копии к центру, в радиусах звезды
+	softFrom: number; // своё начало копии; 0 — там же, где начинаются языки
+};
+
+// ── Ядро ───────────────────────────────────────────────────────────────
+// Диск светлеет не к центру, а к краю: середина уходит в цвет звезды,
+// у самого края почти белая. Сразу за краем — короткий ореол в тот же цвет,
+// пятая часть радиуса: он отделяет диск от пламени.
+// Мельче этого в пикселях градиента не разглядеть — заливаем ровным цветом
+// и экономим два градиента на звезду.
+const CORE_GRADIENT_MIN = 3;
+
+// Ближний к звезде кусок связи рисуется отдельно и толще. Пока связи скрыты
+// (EDGES_HIDDEN) — не рисуется, но код цел.
 const FLARE_WIDTH = 0.5; // доля радиуса звезды
 const FLARE_MIN_SCREEN = 3.5; // короче этого не рисуем: не видно
 const FLARE_MAX = 700; // предел числа огрызков за кадр
 
+// Вид звезды подбирается ползунками в песочнице (web/src/sandbox.ts):
+// рендерер читает эти значения каждый кадр, поэтому правка видна сразу.
+// В приложении их никто не трогает.
+export const tuning = {
+	flame: {
+		tongues: 1,
+		from: 0.59,
+		length: 0.05,
+		width: 0.85,
+		taper: 0.21,
+		sweep: 0,
+		bow: 0,
+		alpha: 0.6,
+		plateau: 0.6,
+		flicker: 0.39,
+		flickerSpeed: 0.2,
+		spin: 82,
+		soft: 0.5,
+		softWidth: 2.85,
+		softShift: 0.02,
+		softFrom: 0.49,
+	} as Flame,
+
+	coreSize: 0.53, // радиус диска в долях радиуса звезды
+	coreTint: 0.35, // насколько центр уходит в цвет звезды
+	coreSharp: 0.6, // докуда центр держит свой цвет, в долях кромки
+	coreRim: 1, // с какой доли радиуса диск уже самый светлый
+	coreGlow: 0.2, // ореол за краем диска, в долях его радиуса
+	coreGlowAlpha: 0.5, // яркость этого ореола
+	corePulse: 0.02, // насколько диск дышит, в долях радиуса
+	corePulsePeriod: 5, // секунд на вдох-выдох
+
+	// Пыль: выше единицы плотность набирается повторными проходами.
+	dustAlpha: 1.4,
+};
+
 const TAP_SLOP = 6; // пикселей: дальше это уже перетаскивание, а не тап
 const LABEL_ZOOM = 1.2;
 
-export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHandlers) {
+// Настройки, нужные только песочнице (web/src/sandbox.ts): на боевой карте
+// подписи показываются по своим правилам, а там надо видеть каждую звезду.
+export type RendererOptions = { labelAll?: boolean };
+
+export function createRenderer(
+	canvas: HTMLCanvasElement,
+	handlers: RendererHandlers,
+	options: RendererOptions = {},
+) {
 	const ctx = canvas.getContext('2d', { alpha: false })!;
 	const camera = new Camera();
 	let scene: Scene = emptyScene();
@@ -123,7 +217,6 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		if (nextDpr !== dpr) {
 			dpr = nextDpr;
 			// Спрайты свечения нарисованы под конкретную плотность пикселей.
-			resetSprites(dpr);
 		}
 		canvas.width = Math.round(cssWidth * dpr);
 		canvas.height = Math.round(cssHeight * dpr);
@@ -209,20 +302,6 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		return 1.8 + (1 - 1.8) * easeInOutCubic(clamp01((t - 0.4) / 0.6));
 	}
 
-	function twinkle(star: Star, now: number): number {
-		if (reduced) return 1;
-		return 1 + 0.1 * Math.sin(star.twinkleFreq * (now / 1000) + star.twinklePhase);
-	}
-
-	// Дыхание ореола: чем больше связей, тем заметнее звезда пульсирует.
-	// Одиночка на краю почти не шевелится, хаб — ощутимо.
-	function breath(star: Star, now: number): number {
-		if (reduced) return 1;
-		const power = Math.min(1, star.node.degree / 18);
-		const period = 4 + 6 * fraction(star.id, 7);
-		return 1 + 0.16 * power * Math.sin((now / 1000) * ((Math.PI * 2) / period) + star.twinklePhase);
-	}
-
 	// ── Хит-тест: линейный перебор, при n ≤ 200 это дёшево ───────────────
 	// Считаем в экранных пикселях: из-за глубины у каждой звезды свой масштаб,
 	// и сравнивать мировые расстояния между ними уже нельзя.
@@ -271,7 +350,6 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 		drawEdges(now, isLit);
 		drawInvites(now);
-		drawGlows(now, isLit);
 		drawCorona(now, isLit);
 		drawCores(now, isLit);
 		drawLabels(now, isLit);
@@ -295,10 +373,20 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		const offsetX = -((camera.x * camera.zoom * DUST_PARALLAX) % DUST_TILE_SIZE);
 		const offsetY = -((camera.y * camera.zoom * DUST_PARALLAX) % DUST_TILE_SIZE);
 
+		if (tuning.dustAlpha <= 0) return;
+
 		ctx.save();
 		ctx.translate(offsetX, offsetY);
 		ctx.fillStyle = pattern;
-		ctx.fillRect(-offsetX - DUST_TILE_SIZE, -offsetY - DUST_TILE_SIZE, cssWidth + DUST_TILE_SIZE * 2, cssHeight + DUST_TILE_SIZE * 2);
+		// Выше единицы прозрачность уже не поднять, поэтому плотность набираем
+		// повторными проходами: два прохода — вдвое гуще.
+		ctx.globalAlpha = Math.min(1, tuning.dustAlpha);
+		const width = cssWidth + DUST_TILE_SIZE * 2;
+		const height = cssHeight + DUST_TILE_SIZE * 2;
+		for (let pass = tuning.dustAlpha; pass > 0; pass -= 1) {
+			ctx.globalAlpha = Math.min(1, pass);
+			ctx.fillRect(-offsetX - DUST_TILE_SIZE, -offsetY - DUST_TILE_SIZE, width, height);
+		}
 		ctx.restore();
 	}
 
@@ -441,6 +529,7 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 	}
 
 	function drawEdges(now: number, isLit: (id: string) => boolean): void {
+		if (EDGES_HIDDEN) return;
 		ctx.save();
 		ctx.globalCompositeOperation = 'lighter';
 		ctx.lineWidth = 0.8;
@@ -548,9 +637,14 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		ctx.restore();
 	}
 
-	// Венец из языков пламени. Все языки одного слоя собираются в один путь
-	// и заливаются разом: две заливки на звезду вместо сотни.
+	// Венец из языков пламени: сначала мягкая копия (она и есть свечение
+	// звезды — отдельного ореола вокруг нет), поверх сами языки. Каждый слой
+	// собирается в один путь и заливается разом: две заливки на звезду
+	// вместо сотни отдельных лепестков.
 	function drawCorona(now: number, isLit: (id: string) => boolean): void {
+		const flame = tuning.flame;
+		if (flame.alpha <= 0) return;
+
 		ctx.save();
 		ctx.globalCompositeOperation = 'lighter';
 
@@ -563,78 +657,95 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 			const { sx, sy, scale: depthScale } = project(star, now);
 			const appear = appearScale(star, now);
-			const glow = star.glow * depthScale * appear * breath(star, now);
-			if (glow < CORONA_MIN_SCREEN) continue;
-			if (sx + glow < 0 || sx - glow > cssWidth || sy + glow < 0 || sy - glow > cssHeight) {
+			const inner = star.radius * depthScale * appear;
+			const reachOut = inner * (1 + flame.length) * flame.softWidth;
+			// Порог — по видимому размеру звезды вместе со свечением, а не по
+			// одному радиусу: иначе на отдалённой карте пламя пропадает у всех.
+			if (reachOut < CORONA_MIN_SCREEN) continue;
+			if (
+				sx + reachOut < 0 ||
+				sx - reachOut > cssWidth ||
+				sy + reachOut < 0 ||
+				sy - reachOut > cssHeight
+			) {
 				continue;
 			}
 			drawn += 1;
 
-			const power = Math.min(1, star.node.degree / CORONA_DEGREE_FULL);
-			const count = Math.round(
-				CORONA_TONGUES[0] + (CORONA_TONGUES[1] - CORONA_TONGUES[0]) * power,
-			);
+			// Языков — по размеру звезды, помноженному на личный множитель
+			// человека: он записан за ним навсегда, поэтому два одинаковых
+			// по числу связей солнца всё равно горят по-своему.
+			const count = Math.max(3, Math.round(tongueCount(star.radius) * star.flame * flame.tongues));
 			const step = (Math.PI * 2) / count;
-			const inner = star.radius * depthScale * appear;
-			const length = glow * CORONA_LENGTH * (0.5 + 0.5 * power);
 			const dim = isLit(star.id) ? 1 : 1 - 0.65 * highlight;
 			const seed = fraction(star.id, 21);
+			const turn = flame.spin > 0 ? spinAt(flame.spin, now, seed) : seed * Math.PI * 2;
+			const from = inner * flame.from;
+			const full = inner * (1 + flame.length);
+			const wave =
+				reduced || flame.flickerSpeed <= 0
+					? 0
+					: (now / 1000) * ((Math.PI * 2) / flame.flickerSpeed) * (0.5 + seed);
 
-			// Венец медленно поворачивается, у каждой звезды со своей скоростью
-			// и в свою сторону — иначе всё небо начинает вращаться синхронно.
-			const spin = reduced
-				? seed * Math.PI * 2
-				: (now / 1000) * ((Math.PI * 2) / CORONA_SPIN) * (seed < 0.5 ? 1 : -1) +
-					seed * Math.PI * 2;
+			// Длина каждого языка гуляет вокруг своей: у соседей разные фазы,
+			// поэтому венец шевелится, а не пульсирует целиком.
+			const reach = (i: number): number => {
+				const beat = reduced
+					? 1
+					: 1 - flame.flicker + flame.flicker * (0.5 + 0.5 * Math.sin(wave + i * 2.7));
+				return inner * (1 + flame.length * beat);
+			};
 
-			const period = CORONA_FLICKER[0] + (CORONA_FLICKER[1] - CORONA_FLICKER[0]) * seed;
-			const phase = reduced ? 0 : (now / 1000) * ((Math.PI * 2) / period);
+			// Мягкая копия. Её можно утопить к центру целиком (softShift)
+			// или начать ближе к ядру (softFrom) — так она закрывает пустое
+			// место между основаниями языков и диском.
+			if (flame.soft > 0) {
+				const shift = inner * flame.softShift;
+				const softFrom = Math.max(
+					0.01,
+					(flame.softFrom > 0 ? inner * flame.softFrom : from) - shift,
+				);
+				ctx.beginPath();
+				for (let i = 0; i < count; i += 1) {
+					tongue(
+						sx,
+						sy,
+						turn + i * step,
+						softFrom,
+						inner + (reach(i) - inner) * flame.softWidth - shift,
+						step * flame.width * flame.softWidth,
+						flame.sweep,
+						flame.taper,
+						flame.bow,
+					);
+				}
+				ctx.fillStyle = coronaFill(
+					sx,
+					sy,
+					softFrom,
+					inner + (full - inner) * flame.softWidth - shift,
+					star.halo,
+					flame.alpha * flame.soft * dim,
+					flame.plateau,
+				);
+				ctx.fill();
+			}
 
-			// Длинные языки. Три несовпадающие гармоники дают неровное,
-			// «живое» мерцание, но разброс длин остаётся умеренным.
 			ctx.beginPath();
 			for (let i = 0; i < count; i += 1) {
-				const flicker =
-					0.72 +
-					0.16 * Math.sin(phase + i * 2.399) +
-					0.09 * Math.sin(phase * 1.7 + i * 1.117) +
-					0.05 * Math.sin(phase * 0.55 + i * 0.71);
 				tongue(
 					sx,
 					sy,
-					spin + i * step,
-					inner * 0.8,
-					inner + length * flicker,
-					step * 0.85,
-					CORONA_SWEEP,
+					turn + i * step,
+					from,
+					reach(i),
+					step * flame.width,
+					flame.sweep,
+					flame.taper,
+					flame.bow,
 				);
 			}
-			ctx.fillStyle = coronaFill(sx, sy, inner * 0.8, inner + length, star.halo, 0.34 * dim);
-			ctx.fill();
-
-			// Плотный слой коротких языков у самого ядра, подвёрнутых в другую
-			// сторону: он и создаёт ощущение кипящей поверхности.
-			ctx.beginPath();
-			for (let i = 0; i < count; i += 1) {
-				const flicker = 0.6 + 0.4 * Math.sin(phase * 1.3 + i * 2.7);
-				tongue(
-					sx,
-					sy,
-					spin + i * step + step * 0.5,
-					inner * 0.45,
-					inner + length * 0.3 * flicker,
-					step * 0.95,
-					-CORONA_SWEEP * 0.7,
-				);
-			}
-			ctx.fillStyle = coronaFill(
-				sx,
-				sy,
-				inner * 0.45,
-				inner + length * 0.3,
-				star.halo,
-				0.5 * dim,
-			);
+			ctx.fillStyle = coronaFill(sx, sy, from, full, star.halo, flame.alpha * dim, flame.plateau);
 			ctx.fill();
 		}
 
@@ -650,25 +761,56 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		to: number,
 		width: number,
 		sweep: number,
+		taper: number,
+		bow: number,
 	): void {
 		const half = width / 2;
 		const tipAngle = angle + sweep;
 		const mid = (from + to) / 2;
+		// taper — насколько язык пузатый в середине, bow — где приходится изгиб.
+		const belly = half * taper;
+		const bend = sweep * bow;
 
 		ctx.moveTo(cx + Math.cos(angle - half) * from, cy + Math.sin(angle - half) * from);
 		ctx.quadraticCurveTo(
-			cx + Math.cos(angle - half * 0.3 + sweep * 0.45) * mid,
-			cy + Math.sin(angle - half * 0.3 + sweep * 0.45) * mid,
+			cx + Math.cos(angle - belly + bend) * mid,
+			cy + Math.sin(angle - belly + bend) * mid,
 			cx + Math.cos(tipAngle) * to,
 			cy + Math.sin(tipAngle) * to,
 		);
 		ctx.quadraticCurveTo(
-			cx + Math.cos(angle + half * 0.3 + sweep * 0.45) * mid,
-			cy + Math.sin(angle + half * 0.3 + sweep * 0.45) * mid,
+			cx + Math.cos(angle + belly + bend) * mid,
+			cy + Math.sin(angle + belly + bend) * mid,
 			cx + Math.cos(angle + half) * from,
 			cy + Math.sin(angle + half) * from,
 		);
 		ctx.closePath();
+	}
+
+	// Дыхание диска. corePulse — насколько сильно меняется радиус (доля
+	// от него), corePulsePeriod — за сколько секунд полный вдох-выдох.
+	// Ноль силы означает полную неподвижность, без всяких оговорок.
+	function corePulse(star: Star, now: number): number {
+		if (reduced || tuning.corePulse <= 0 || tuning.corePulsePeriod <= 0) return 1;
+		const turn = (now / 1000) * ((Math.PI * 2) / tuning.corePulsePeriod);
+		return 1 + tuning.corePulse * Math.sin(turn + star.twinklePhase);
+	}
+
+	// Поворот слоя. У каждой звезды своя сторона вращения — иначе всё небо
+	// начинает крутиться синхронно и это сразу читается как механизм.
+	function spinAt(period: number, now: number, seed: number): number {
+		const start = seed * Math.PI * 2;
+		if (reduced) return start;
+		return (now / 1000) * ((Math.PI * 2) / period) * (seed < 0.5 ? 1 : -1) + start;
+	}
+
+	// Сколько языков у звезды такого радиуса: прямая через две точки
+	// CORONA_TONGUES_AT с ограничителями по краям.
+	function tongueCount(radius: number): number {
+		const [small, big] = CORONA_TONGUES_AT;
+		const t = (radius - small.radius) / (big.radius - small.radius);
+		const raw = small.tongues + (big.tongues - small.tongues) * t;
+		return Math.min(CORONA_TONGUES_MAX, Math.max(CORONA_TONGUES_MIN, Math.round(raw)));
 	}
 
 	// Заливка венца: у основания плотная, к остриям сходит на нет.
@@ -679,62 +821,64 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 		to: number,
 		color: RGB,
 		alpha: number,
+		plateau: number,
 	): CanvasGradient {
 		const gradient = ctx.createRadialGradient(cx, cy, from * 0.5, cx, cy, to);
 		gradient.addColorStop(0, rgba(color, alpha));
-		gradient.addColorStop(0.45, rgba(color, alpha * 0.6));
+		gradient.addColorStop(Math.min(0.99, Math.max(0.01, plateau)), rgba(color, alpha * 0.6));
 		gradient.addColorStop(1, rgba(color, 0));
 		return gradient;
-	}
-
-	function drawGlows(now: number, isLit: (id: string) => boolean): void {
-		ctx.save();
-		ctx.globalCompositeOperation = 'lighter';
-
-		for (const star of scene.order) {
-			// У заблокированного звезда серая и без свечения.
-			if (star.node.isBlocked) continue;
-
-			const { sx: x, sy: y, scale: depthScale } = project(star, now);
-			const scale = appearScale(star, now);
-			const glow = star.glow * depthScale * scale * breath(star, now);
-			if (glow < 0.5) continue;
-			if (x + glow < 0 || x - glow > cssWidth || y + glow < 0 || y - glow > cssHeight) continue;
-
-			const dim = isLit(star.id) ? 1 : 1 - 0.65 * highlight;
-			// Дальние звёзды тусклее ближних — вторая половина ощущения объёма.
-			const depthDim = 0.72 + 0.28 * (1 + star.depth * DEPTH_STRENGTH);
-			ctx.globalAlpha = Math.min(1, star.bright * twinkle(star, now) * dim * depthDim);
-
-			const { sprite, spriteRadius } = glowSprite(
-				star.node.gender,
-				star.node.isBlocked,
-				star.halo,
-				glow,
-				dpr,
-			);
-			void spriteRadius;
-			ctx.drawImage(sprite, x - glow, y - glow, glow * 2, glow * 2);
-		}
-
-		ctx.globalAlpha = 1;
-		ctx.restore();
 	}
 
 	function drawCores(now: number, isLit: (id: string) => boolean): void {
 		for (const star of scene.order) {
 			const { sx: x, sy: y, scale: depthScale } = project(star, now);
 			const scale = appearScale(star, now);
-			const radius = Math.max(0.7, star.radius * depthScale * scale * 0.5);
+			const radius = Math.max(
+				0.7,
+				star.radius * depthScale * scale * tuning.coreSize * corePulse(star, now),
+			);
 			if (x + radius < 0 || x - radius > cssWidth || y + radius < 0 || y - radius > cssHeight)
 				continue;
 
 			const dim = isLit(star.id) ? 1 : 1 - 0.65 * highlight;
 			ctx.globalAlpha = star.node.isBlocked ? 0.35 * dim : dim;
-			ctx.fillStyle = star.node.isBlocked ? rgb(star.halo) : CORE;
-			ctx.beginPath();
-			ctx.arc(x, y, radius, 0, Math.PI * 2);
-			ctx.fill();
+
+			if (star.node.isBlocked || radius < CORE_GRADIENT_MIN) {
+				ctx.fillStyle = star.node.isBlocked ? rgb(star.halo) : CORE;
+				ctx.beginPath();
+				ctx.arc(x, y, radius, 0, Math.PI * 2);
+				ctx.fill();
+			} else {
+				// Ореол за краем диска — до самого пламени. Рисуем первым,
+				// чтобы диск лёг поверх и край остался чётким.
+				ctx.save();
+				ctx.globalCompositeOperation = 'lighter';
+				const edge = radius * (1 + tuning.coreGlow);
+				const glow = ctx.createRadialGradient(x, y, radius * 0.92, x, y, edge);
+				glow.addColorStop(0, rgba(star.halo, tuning.coreGlowAlpha * dim));
+				glow.addColorStop(1, rgba(star.halo, 0));
+				ctx.fillStyle = glow;
+				ctx.beginPath();
+				ctx.arc(x, y, edge, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
+
+				// Сам диск: середина держит еле-синий цвет, у кромки резко
+				// выходит в белый. Держим цвет до coreSharp доли кромки,
+				// а весь переход укладываем в оставшуюся полоску.
+				const centre = mix(CORE_RGB, star.halo, tuning.coreTint);
+				const hold = tuning.coreRim * tuning.coreSharp;
+				const disc = ctx.createRadialGradient(x, y, 0, x, y, radius);
+				disc.addColorStop(0, rgb(centre));
+				disc.addColorStop(hold, rgb(centre));
+				disc.addColorStop(tuning.coreRim, CORE);
+				disc.addColorStop(1, CORE);
+				ctx.fillStyle = disc;
+				ctx.beginPath();
+				ctx.arc(x, y, radius, 0, Math.PI * 2);
+				ctx.fill();
+			}
 
 			// Выбранную звезду обводим тонким кольцом — чтобы было видно,
 			// о ком карточка в углу.
@@ -753,7 +897,7 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 	// Подписи появляются только вблизи и только у заметных звёзд: иначе небо
 	// превращается в свалку (раздел 8.6).
 	function drawLabels(now: number, isLit: (id: string) => boolean): void {
-		if (camera.zoom < LABEL_ZOOM) return;
+		if (camera.zoom < LABEL_ZOOM && !options.labelAll) return;
 
 		ctx.save();
 		ctx.font = '11px -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -764,6 +908,7 @@ export function createRenderer(canvas: HTMLCanvasElement, handlers: RendererHand
 
 		for (const star of scene.order) {
 			const notable =
+				options.labelAll === true ||
 				star.node.degree >= 4 ||
 				star.id === selectedId ||
 				star.id === hoveredId ||

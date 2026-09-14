@@ -19,6 +19,8 @@ export type GraphNode = {
 	gender: Gender;
 	age: number | null;
 	degree: number;
+	// Личный множитель числа языков пламени, 0.55…1 (раздел «Рендер»).
+	flame: number;
 	centrality: number;
 	x: number;
 	y: number;
