@@ -40,6 +40,9 @@ export type PendingInvite = {
 
 export type Graph = {
 	layoutVersion: number;
+	// Во сколько раз небо растянуто против размера, к которому сходится
+	// симуляция: без него предсказание сминает раскладку.
+	layoutScale: number;
 	me: string;
 	nodes: GraphNode[];
 	edges: [string, string][];

@@ -32,6 +32,7 @@ export function predictLayout(graph: Graph, edges: [string, string][]): Promise<
 			.map(([a, b]) => [index.get(a), index.get(b)])
 			.filter((pair): pair is [number, number] => pair[0] !== undefined && pair[1] !== undefined),
 		previous: graph.nodes.map((node) => [node.id, { x: node.x, y: node.y }]),
+		previousScale: graph.layoutScale,
 		maxIterations: PREDICT_ITERATIONS,
 	};
 

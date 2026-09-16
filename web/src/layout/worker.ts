@@ -4,6 +4,7 @@ export type PredictRequest = {
 	ids: string[];
 	edges: [number, number][];
 	previous: [string, { x: number; y: number }][];
+	previousScale?: number;
 	maxIterations?: number;
 };
 
@@ -23,6 +24,7 @@ self.onmessage = (event: MessageEvent<PredictRequest>) => {
 		ids: request.ids.map((id) => BigInt(id)),
 		edges: request.edges,
 		previous: new Map(request.previous.map(([id, point]) => [BigInt(id), point])),
+		previousScale: request.previousScale,
 		maxIterations: request.maxIterations,
 	});
 

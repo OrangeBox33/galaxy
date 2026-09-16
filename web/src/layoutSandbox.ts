@@ -103,6 +103,7 @@ function toGraph(layout: LayoutResult): Graph {
 	}));
 	return {
 		layoutVersion: 1,
+		layoutScale: layout.scale,
 		me: '0',
 		nodes,
 		edges: allEdges().map(([a, b]) => [String(a), String(b)] as [string, string]),

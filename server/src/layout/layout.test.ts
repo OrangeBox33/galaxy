@@ -206,6 +206,54 @@ describe('раскладка', () => {
 		expect(median).toBeLessThan(0.03 * R);
 	});
 
+	it('новая связь не перетасовывает небо, в том числе в предсказании', () => {
+		// Случай с боя: человек связывается с тем, у кого связей ещё нет.
+		// Короткий прогон — то, чем клиент предсказывает результат сразу после
+		// нажатия. Порог с запасом: замер даёт 47 и 48 единиц, а стоит потерять
+		// previousScale по дороге — становится 141 и 160.
+		const random = mulberry32(31337);
+		const n = 60;
+		const edges: [number, number][] = [];
+		const seen = new Set<string>();
+		for (let i = 1; i < n; i += 1) {
+			const j = Math.floor(random() ** 2 * i);
+			const key = `${Math.min(i, j)}-${Math.max(i, j)}`;
+			if (i === j || seen.has(key)) continue;
+			seen.add(key);
+			edges.push([Math.min(i, j), Math.max(i, j)]);
+		}
+
+		// Ещё один человек, пока без единой связи.
+		const lonely = n;
+		const all = ids(n + 1);
+		const base = computeLayout({ ids: all, edges, full: true });
+		const previous = new Map<bigint, Point>(
+			base.nodes.map((node) => [node.id, { x: node.x, y: node.y }]),
+		);
+
+		const linked: [number, number][] = [...edges, [3, lonely]];
+		const moved = (maxIterations?: number): number => {
+			const next = computeLayout({
+				ids: all,
+				edges: linked,
+				previous,
+				previousScale: base.scale,
+				maxIterations,
+			});
+			const shifts = next.nodes
+				.filter((node) => node.id !== BigInt(lonely + 1))
+				.map((node) => {
+					const old = previous.get(node.id)!;
+					return Math.hypot(node.x - old.x, node.y - old.y);
+				})
+				.sort((a, b) => a - b);
+			return shifts[Math.floor(shifts.length / 2)];
+		};
+
+		expect(moved()).toBeLessThan(0.06 * R);
+		expect(moved(160)).toBeLessThan(0.06 * R);
+	});
+
 	it('прокруст: повёрнутая и отражённая раскладка возвращается на место', () => {
 		const graph: Graph = { ids: ids(30), edges: star(0, 12, 1).concat(star(13, 8, 20)) };
 		const original = computeLayout({ ...graph, full: true });

@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { displayName } from '../lib/names.js';
 import { requireActiveUser, requireSession } from '../auth/middleware.js';
-import { getLayoutVersion } from '../layout/state.js';
+import { getLayoutScale, getLayoutVersion } from '../layout/state.js';
 
 export function graphRouter(): Router {
 	const router = Router();
@@ -14,7 +14,7 @@ export function graphRouter(): Router {
 		try {
 			const userId = req.userId!;
 
-			const [users, links, pending, dismissed, layoutVersion] = await Promise.all([
+			const [users, links, pending, dismissed, layoutVersion, layoutScale] = await Promise.all([
 				db.user.findMany({ orderBy: { id: 'asc' } }),
 				db.link.findMany({ select: { aId: true, bId: true } }),
 				// Чужие тусклые точки не отдаются никогда, даже админу.
@@ -29,10 +29,12 @@ export function graphRouter(): Router {
 					select: { targetId: true },
 				}),
 				getLayoutVersion(),
+				getLayoutScale(),
 			]);
 
 			res.json({
 				layoutVersion,
+				layoutScale,
 				me: userId.toString(),
 				nodes: users.map((user) => ({
 					id: user.id.toString(),

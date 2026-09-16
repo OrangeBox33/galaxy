@@ -32,6 +32,7 @@ const nodes: GraphNode[] = DEGREES.map((degree, i) => {
 
 const graph: Graph = {
 	layoutVersion: 1,
+	layoutScale: 1,
 	me: nodes[0].id,
 	nodes,
 	edges: [],

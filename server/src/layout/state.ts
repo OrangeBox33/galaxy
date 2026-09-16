@@ -28,3 +28,12 @@ export async function getLayoutVersion(client: Db = db): Promise<number> {
 	const state = await client.layoutState.findUnique({ where: { id: 1 } });
 	return state?.version ?? 0;
 }
+
+// Во сколько раз готовая раскладка растянута против размера, к которому сходится
+// симуляция. Клиенту нужен для предсказания: без него оно стартует с растянутого
+// неба, силы принимаются его сжимать и перетасовывают звёзды на пол-экрана.
+export async function getLayoutScale(client: Db = db): Promise<number> {
+	const state = await client.layoutState.findUnique({ where: { id: 1 } });
+	const params = (state?.params ?? null) as { scale?: number } | null;
+	return typeof params?.scale === 'number' && params.scale > 0 ? params.scale : 1;
+}
