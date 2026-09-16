@@ -1,0 +1,343 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>«Связать»: четыре вау</title><style>
+:root {
+	color-scheme: dark;
+	--sky-top: #04060e;
+	--sky-mid: #0a0e1c;
+	--sky-bottom: #060811;
+	--text: #e9f0ff;
+	--text-dim: rgba(233, 240, 255, 0.55);
+	--panel: rgba(10, 14, 28, 0.86);
+	--panel-edge: rgba(200, 216, 255, 0.14);
+	--accent: #c8d8ff;
+	--danger: #ff8fa0;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0b0f;color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+.wrap{display:flex;gap:28px;padding:24px;align-items:flex-start}
+.phone{position:relative;width:390px;height:520px;flex:none;border:1px solid #223;border-radius:24px;overflow:hidden;
+background:radial-gradient(1200px 600px at 30% 120%,#10192e,#04060e 70%)}
+.avatar--letter{display:flex;align-items:center;justify-content:center;color:#0a0e1c;font-weight:600}
+.panel h1{font-size:15px;margin:0 0 12px;font-weight:500}
+.pick{display:flex;flex-direction:column;gap:8px;max-width:420px}
+.pick button{text-align:left;border:1px solid var(--panel-edge);background:var(--panel);border-radius:12px;
+padding:10px 12px;cursor:pointer;color:inherit}
+.pick button.on{border-color:#9fc0ff;background:rgba(120,160,255,.16)}
+.pick b{font-weight:600}
+.pick i{display:block;font-style:normal;color:var(--text-dim);font-size:12.5px;margin-top:3px}
+.hint{color:var(--text-dim);font-size:12.5px;margin-top:14px;max-width:420px}
+/* ── Возможные друзья ──────────────────────────────────────────────────
+   Стопка карточек в правом верхнем углу. Слот отвечает за место в стопке
+   (и плавно подтягивает нижние вверх, когда ушла верхняя), содержимое —
+   за прилёт и уход. Шаг стопки 72px = высота карточки плюс зазор; то же
+   число лежит в Suggestions.tsx, разъезжаться им нельзя.
+
+   Ширина держится в обещанных 40% экрана, поэтому отступы внутри тесные:
+   иначе «Связать» и «Нет» не помещаются в строку и правый край обрезается. */
+.suggest {
+	position: absolute;
+	top: max(12px, env(safe-area-inset-top));
+	right: 8px;
+	width: min(40vw, 230px);
+	min-width: 150px;
+	/* Карточки ловят нажатия сами; всё, что между ними, остаётся небом. */
+	pointer-events: none;
+}
+
+.suggest__slot {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	transition: transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+	pointer-events: auto;
+}
+
+.suggest__slot--leaving {
+	pointer-events: none;
+}
+
+.suggest__item {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 64px;
+	padding: 0 7px;
+	box-sizing: border-box;
+	border: 1px solid var(--panel-edge);
+	border-radius: 13px;
+	background: var(--panel);
+	backdrop-filter: blur(12px);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	overflow: hidden;
+	animation: suggest-in 450ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.suggest__body {
+	min-width: 0;
+	flex: 1;
+}
+
+.suggest__name {
+	font-size: 13px;
+	font-weight: 500;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.suggest__actions {
+	display: flex;
+	gap: 5px;
+	margin-top: 4px;
+}
+
+.suggest__btn {
+	border: 1px solid transparent;
+	border-radius: 8px;
+	padding: 4px 6px;
+	font-size: 11px;
+	line-height: 1.1;
+	white-space: nowrap;
+	background: rgba(200, 216, 255, 0.16);
+	color: inherit;
+	font-family: inherit;
+	cursor: pointer;
+}
+
+.suggest__btn:hover {
+	background: rgba(200, 216, 255, 0.24);
+}
+
+.suggest__btn--ghost {
+	background: none;
+	border-color: var(--panel-edge);
+	color: var(--text-dim);
+}
+
+/* Прилёт снизу — проявление из темноты: альфа с нуля, ничего не вспыхивает. */
+@keyframes suggest-in {
+	from {
+		opacity: 0;
+		transform: translateY(26px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* «Нет»: карточка просто гаснет. */
+.suggest__item--fade {
+	animation: suggest-fade 500ms ease forwards;
+}
+
+@keyframes suggest-fade {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+/* «Связать»: вспышка расходится от нажатой кнопки до стенок карточки
+   (её края держит overflow: hidden). Дошла до белого — и всё обрывается
+   разом: ни затухания вспышки, ни отдельного исчезновения карточки.
+   Быстро, 220 мс: карточка внизу поедет вверх только после этого, иначе
+   взрыв подсветил бы уже её. */
+.suggest__item--burst {
+	animation: suggest-burst 220ms linear forwards;
+}
+
+@keyframes suggest-burst {
+	0%,
+	99% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+/* Круг заведомо больше карточки: от кнопки до дальнего угла ~240px,
+   поэтому радиус 260. Меньше — и угол остался бы неосвещённым. */
+.suggest__flash {
+	position: absolute;
+	left: var(--fx, 50%);
+	top: var(--fy, 50%);
+	width: 520px;
+	height: 520px;
+	margin: -260px 0 0 -260px;
+	border-radius: 50%;
+	background: radial-gradient(
+		circle,
+		#ffffff 0%,
+		rgba(255, 255, 255, 0.98) 46%,
+		rgba(214, 232, 255, 0.72) 70%,
+		rgba(255, 255, 255, 0) 100%
+	);
+	transform: scale(0);
+	opacity: 0;
+	pointer-events: none;
+}
+
+.suggest__item--burst .suggest__flash {
+	animation: suggest-flash 220ms cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+}
+
+@keyframes suggest-flash {
+	from {
+		transform: scale(0);
+		opacity: 1;
+	}
+	to {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+
+/* Движение выключено — карточки появляются и исчезают мгновенно. */
+@media (prefers-reduced-motion: reduce) {
+	.suggest__slot {
+		transition: none;
+	}
+	.suggest__slot--leaving {
+		display: none;
+	}
+	.suggest__item,
+	.suggest__item--fade,
+	.suggest__item--burst,
+	.suggest__item--burst .suggest__flash {
+		animation: none;
+	}
+}
+
+
+/* ── Варианты «вау» (только стенд) ───────────────────────────────── */
+
+/* A. Ударная волна: светится кромка, середина почти прозрачная. */
+.wave{position:absolute;left:var(--fx);top:var(--fy);width:560px;height:560px;margin:-280px 0 0 -280px;
+ border-radius:50%;pointer-events:none;transform:scale(0);opacity:0;
+ background:radial-gradient(circle,rgba(255,255,255,0) 58%,rgba(198,224,255,.55) 74%,#fff 84%,rgba(255,255,255,.9) 90%,rgba(255,255,255,0) 96%)}
+.go-wave .wave{animation:wave 420ms cubic-bezier(.2,.7,.35,1) forwards}
+@keyframes wave{0%{transform:scale(0);opacity:1}70%{opacity:1}100%{transform:scale(1);opacity:0}}
+.go-wave{animation:wave-card 420ms ease-out forwards}
+@keyframes wave-card{0%{opacity:1}55%{opacity:1;background:rgba(150,180,255,.22)}
+ 100%{opacity:0;transform:scale(.94)}}
+
+/* B. Искры: короткая вспышка и разлёт, карточка гаснет следом. */
+.spark{position:absolute;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:2px;background:#fff;
+ box-shadow:0 0 8px rgba(200,224,255,.95);pointer-events:none}
+.go-sparks{animation:spark-card 430ms ease-out forwards;overflow:visible!important}
+@keyframes spark-card{0%{opacity:1}18%{background:rgba(255,255,255,.92);border-color:#fff}
+ 100%{opacity:0;transform:scale(.9)}}
+
+/* C. Схлопывание в звезду: карточка сжимается в точку, точка вспыхивает
+      и улетает на небо. */
+.go-star{transform-origin:var(--fx) var(--fy);animation:star-card 460ms cubic-bezier(.5,0,.75,0) forwards;overflow:visible!important}
+@keyframes star-card{0%{opacity:1}30%{background:rgba(255,255,255,.9);border-color:#fff;opacity:1}
+ 62%{transform:scale(.04);opacity:1}100%{transform:scale(.04);opacity:0}}
+.seed{position:absolute;left:var(--fx);top:var(--fy);width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;
+ background:#fff;box-shadow:0 0 14px 4px rgba(214,232,255,.95);opacity:0;pointer-events:none}
+.go-star .seed{animation:seed 460ms cubic-bezier(.3,.1,.2,1) forwards}
+@keyframes seed{0%,55%{opacity:0;transform:translate(0,0) scale(.4)}
+ 66%{opacity:1;transform:translate(0,0) scale(1.6)}
+ 100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(.25)}}
+
+/* D. Обвод: свет бежит по периметру от кнопки в обе стороны. */
+.go-edge{animation:edge-card 420ms linear forwards}
+@keyframes edge-card{0%{opacity:1;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+ 55%{box-shadow:0 0 0 1px rgba(255,255,255,.9),0 0 22px 4px rgba(190,220,255,.7)}
+ 70%{background:rgba(255,255,255,.95);border-color:#fff;opacity:1}
+ 100%{opacity:0;transform:scaleY(.12)}}
+.trace{position:absolute;inset:-1px;border-radius:13px;pointer-events:none;
+ border:1px solid transparent;opacity:0}
+.go-edge .trace{animation:trace 300ms linear forwards;
+ background:conic-gradient(from var(--ang),rgba(255,255,255,0) 0deg,#fff 12deg,rgba(255,255,255,0) 40deg,
+ rgba(255,255,255,0) 320deg,#fff 348deg,rgba(255,255,255,0) 360deg);
+ -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+ -webkit-mask-composite:xor;mask-composite:exclude;padding:1.5px}
+@keyframes trace{0%{opacity:1;--ang:0deg}100%{opacity:1;--ang:180deg}}
+@property --ang{syntax:'<angle>';initial-value:0deg;inherits:false}
+
+</style></head><body>
+<div class="wrap">
+  <div class="phone"><div class="suggest" id="stack"></div></div>
+  <div class="panel">
+    <h1>Что делает «Связать»</h1>
+    <div class="pick" id="pick">
+      <button data-v="wave" class="on"><b>A. Ударная волна</b><i>Светится только кромка волны, середина прозрачная. 420 мс.</i></button>
+      <button data-v="sparks"><b>B. Искры</b><i>Вспышка и разлёт искр за края карточки. 430 мс.</i></button>
+      <button data-v="star"><b>C. Схлопывание в звезду</b><i>Карточка сжимается в точку, точка вспыхивает и улетает на небо. 460 мс.</i></button>
+      <button data-v="edge"><b>D. Обвод по контуру</b><i>Свет бежит по периметру от кнопки в обе стороны и схлопывает карточку. 420 мс.</i></button>
+    </div>
+    <div class="hint">Выберите вариант и жмите «Связать» на любой карточке. «Нет» гасит как сейчас.
+    Карточки добираются снизу бесконечно.</div>
+  </div>
+</div>
+<script>
+const PEOPLE=[['Марина Ковалёва','#FF8FC0','М'],['Илья','#6FA8FF','И'],['Саша Петров','#C8D8FF','С'],
+['Дмитрий Орлов','#C8D8FF','Д'],['Аня','#FF8FC0','А'],['Константин','#6FA8FF','К'],['Женя','#FF8FC0','Ж']];
+const STEP=72, FADE=500;
+const LEN={wave:420,sparks:430,star:460,edge:420};
+let variant='wave', rows=[], next=0;
+const stack=document.getElementById('stack');
+
+document.getElementById('pick').onclick=e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  variant=b.dataset.v;
+  [...document.querySelectorAll('.pick button')].forEach(x=>x.classList.toggle('on',x===b));
+};
+
+function card(i){
+  const [name,tint,letter]=PEOPLE[i%PEOPLE.length];
+  const slot=document.createElement('div'); slot.className='suggest__slot';
+  slot.innerHTML=`<div class="suggest__item">
+    <div class="avatar avatar--letter" style="width:30px;height:30px;border-radius:15px;background:${tint};font-size:13px">${letter}</div>
+    <div class="suggest__body"><div class="suggest__name">${name}</div>
+    <div class="suggest__actions"><button class="suggest__btn" data-go="link">Связать</button>
+    <button class="suggest__btn suggest__btn--ghost" data-go="fade">Нет</button></div></div>
+    <div class="suggest__flash"></div><div class="trace"></div><div class="seed"></div></div>`;
+  slot.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>leave(slot,b));
+  return slot;
+}
+function place(){ rows.forEach((s,i)=>s.style.transform=`translateY(${i*STEP}px)`); }
+
+function leave(slot,button){
+  const item=slot.firstElementChild, box=item.getBoundingClientRect(), br=button.getBoundingClientRect();
+  const fx=br.left+br.width/2-box.left, fy=br.top+br.height/2-box.top;
+  item.style.setProperty('--fx',fx+'px'); item.style.setProperty('--fy',fy+'px');
+  slot.classList.add('suggest__slot--leaving');
+  slot.querySelectorAll('button').forEach(b=>b.disabled=true);
+
+  let ms=FADE;
+  if(button.dataset.go==='fade'){ item.classList.add('suggest__item--fade'); }
+  else {
+    ms=LEN[variant];
+    if(variant==='wave'){ const w=document.createElement('div'); w.className='wave'; item.appendChild(w); item.classList.add('go-wave'); }
+    if(variant==='sparks'){
+      item.classList.add('go-sparks');
+      for(let k=0;k<18;k++){
+        const a=Math.PI*2*k/18+Math.random()*.3, d=70+Math.random()*90;
+        const s=document.createElement('i'); s.className='spark';
+        s.style.left=fx+'px'; s.style.top=fy+'px';
+        item.appendChild(s);
+        s.animate([{transform:'translate(0,0) scale(1.4)',opacity:1},
+                   {transform:`translate(${Math.cos(a)*d}px,${Math.sin(a)*d}px) scale(.2)`,opacity:0}],
+                  {duration:380+Math.random()*120,easing:'cubic-bezier(.1,.7,.3,1)',fill:'forwards'});
+      }
+    }
+    if(variant==='star'){
+      const phone=slot.closest('.phone').getBoundingClientRect();
+      item.style.setProperty('--tx',(phone.left+phone.width*0.42-(box.left+fx))+'px');
+      item.style.setProperty('--ty',(phone.top+phone.height*0.55-(box.top+fy))+'px');
+      item.classList.add('go-star');
+    }
+    if(variant==='edge'){ item.classList.add('go-edge'); }
+  }
+  setTimeout(()=>{ rows=rows.filter(s=>s!==slot); slot.remove(); place(); add(); }, ms);
+}
+function add(){ if(rows.length>=3)return; const s=card(next++); stack.appendChild(s); rows.push(s); place(); }
+add();add();add();
+</script></body></html>

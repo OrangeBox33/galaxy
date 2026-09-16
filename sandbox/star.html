@@ -1,0 +1,412 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Схлопывание в звезду — восемь вариантов</title><style>
+:root {
+	color-scheme: dark;
+	--sky-top: #04060e;
+	--sky-mid: #0a0e1c;
+	--sky-bottom: #060811;
+	--text: #e9f0ff;
+	--text-dim: rgba(233, 240, 255, 0.55);
+	--panel: rgba(10, 14, 28, 0.86);
+	--panel-edge: rgba(200, 216, 255, 0.14);
+	--accent: #c8d8ff;
+	--danger: #ff8fa0;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0b0f;color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+.wrap{display:flex;gap:28px;padding:24px;align-items:flex-start}
+.phone{position:relative;width:390px;height:520px;flex:none;border:1px solid #223;border-radius:24px;overflow:hidden;
+background:radial-gradient(1200px 600px at 30% 120%,#10192e,#04060e 70%)}
+.avatar--letter{display:flex;align-items:center;justify-content:center;color:#0a0e1c;font-weight:600}
+.panel h1{font-size:15px;margin:0 0 4px;font-weight:500}
+.panel p.sub{margin:0 0 12px;color:var(--text-dim);font-size:12.5px;max-width:430px}
+.pick{display:flex;flex-direction:column;gap:7px;max-width:430px}
+.pick button{text-align:left;border:1px solid var(--panel-edge);background:var(--panel);border-radius:12px;
+padding:9px 12px;cursor:pointer;color:inherit}
+.pick button.on{border-color:#9fc0ff;background:rgba(120,160,255,.16)}
+.pick b{font-weight:600}
+.pick i{display:block;font-style:normal;color:var(--text-dim);font-size:12.5px;margin-top:2px}
+/* ── Возможные друзья ──────────────────────────────────────────────────
+   Стопка карточек в правом верхнем углу. Слот отвечает за место в стопке
+   (и плавно подтягивает нижние вверх, когда ушла верхняя), содержимое —
+   за прилёт и уход. Шаг стопки 72px = высота карточки плюс зазор; то же
+   число лежит в Suggestions.tsx, разъезжаться им нельзя.
+
+   Ширина держится в обещанных 40% экрана, поэтому отступы внутри тесные:
+   иначе «Связать» и «Нет» не помещаются в строку и правый край обрезается. */
+.suggest {
+	position: absolute;
+	top: max(12px, env(safe-area-inset-top));
+	right: 8px;
+	width: min(40vw, 230px);
+	min-width: 150px;
+	/* Карточки ловят нажатия сами; всё, что между ними, остаётся небом. */
+	pointer-events: none;
+}
+
+.suggest__slot {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	transition: transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+	pointer-events: auto;
+}
+
+.suggest__slot--leaving {
+	pointer-events: none;
+}
+
+.suggest__item {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 64px;
+	padding: 0 7px;
+	box-sizing: border-box;
+	border: 1px solid var(--panel-edge);
+	border-radius: 13px;
+	background: var(--panel);
+	backdrop-filter: blur(12px);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	overflow: hidden;
+	animation: suggest-in 450ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.suggest__body {
+	min-width: 0;
+	flex: 1;
+}
+
+.suggest__name {
+	font-size: 13px;
+	font-weight: 500;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.suggest__actions {
+	display: flex;
+	gap: 5px;
+	margin-top: 4px;
+}
+
+.suggest__btn {
+	border: 1px solid transparent;
+	border-radius: 8px;
+	padding: 4px 6px;
+	font-size: 11px;
+	line-height: 1.1;
+	white-space: nowrap;
+	background: rgba(200, 216, 255, 0.16);
+	color: inherit;
+	font-family: inherit;
+	cursor: pointer;
+}
+
+.suggest__btn:hover {
+	background: rgba(200, 216, 255, 0.24);
+}
+
+.suggest__btn--ghost {
+	background: none;
+	border-color: var(--panel-edge);
+	color: var(--text-dim);
+}
+
+/* Прилёт снизу — проявление из темноты: альфа с нуля, ничего не вспыхивает. */
+@keyframes suggest-in {
+	from {
+		opacity: 0;
+		transform: translateY(26px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* «Нет»: карточка просто гаснет. */
+.suggest__item--fade {
+	animation: suggest-fade 340ms ease forwards;
+}
+
+@keyframes suggest-fade {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+/* «Связать»: вспышка расходится от нажатой кнопки до стенок карточки
+   (её края держит overflow: hidden). Дошла до белого — и всё обрывается
+   разом: ни затухания вспышки, ни отдельного исчезновения карточки.
+   Быстро, 220 мс: карточка внизу поедет вверх только после этого, иначе
+   взрыв подсветил бы уже её. */
+.suggest__item--burst {
+	animation: suggest-burst 220ms linear forwards;
+}
+
+@keyframes suggest-burst {
+	0%,
+	99% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+/* Круг заведомо больше карточки: от кнопки до дальнего угла ~240px,
+   поэтому радиус 260. Меньше — и угол остался бы неосвещённым. */
+.suggest__flash {
+	position: absolute;
+	left: var(--fx, 50%);
+	top: var(--fy, 50%);
+	width: 520px;
+	height: 520px;
+	margin: -260px 0 0 -260px;
+	border-radius: 50%;
+	background: radial-gradient(
+		circle,
+		#ffffff 0%,
+		rgba(255, 255, 255, 0.98) 46%,
+		rgba(214, 232, 255, 0.72) 70%,
+		rgba(255, 255, 255, 0) 100%
+	);
+	transform: scale(0);
+	opacity: 0;
+	pointer-events: none;
+}
+
+.suggest__item--burst .suggest__flash {
+	animation: suggest-flash 220ms cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+}
+
+@keyframes suggest-flash {
+	from {
+		transform: scale(0);
+		opacity: 1;
+	}
+	to {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+
+/* Движение выключено — карточки появляются и исчезают мгновенно. */
+@media (prefers-reduced-motion: reduce) {
+	.suggest__slot {
+		transition: none;
+	}
+	.suggest__slot--leaving {
+		display: none;
+	}
+	.suggest__item,
+	.suggest__item--fade,
+	.suggest__item--burst,
+	.suggest__item--burst .suggest__flash {
+		animation: none;
+	}
+}
+
+
+/* ── Схлопывание в звезду: восемь вариантов (только стенд) ───────── */
+.sq-plain{animation:sq-plain var(--ms) cubic-bezier(.5,0,.75,0) forwards}
+@keyframes sq-plain{0%{opacity:1}26%{background:rgba(255,255,255,.92);border-color:#fff}
+ 60%{transform:scale(.04);opacity:1}100%{transform:scale(.04);opacity:0}}
+
+.sq-hold{animation:sq-hold var(--ms) cubic-bezier(.45,0,.6,1) forwards}
+@keyframes sq-hold{0%{opacity:1}24%{background:rgba(255,255,255,.92);border-color:#fff}
+ 48%{transform:scale(.05);opacity:1}100%{transform:scale(.05);opacity:0}}
+
+.sq-crt{animation:sq-crt var(--ms) cubic-bezier(.6,0,.8,.2) forwards}
+@keyframes sq-crt{0%{opacity:1}22%{background:rgba(255,255,255,.95);border-color:#fff}
+ 45%{transform:scaleY(.06);background:#fff;opacity:1}
+ 72%{transform:scaleY(.06) scaleX(.05);opacity:1}100%{transform:scaleY(.06) scaleX(.05);opacity:0}}
+
+.sq-swirl{animation:sq-swirl var(--ms) cubic-bezier(.55,0,.7,.25) forwards}
+@keyframes sq-swirl{0%{opacity:1;filter:blur(0)}25%{background:rgba(255,255,255,.9);border-color:#fff}
+ 62%{transform:scale(.05) rotate(26deg);filter:blur(1px);opacity:1}
+ 100%{transform:scale(.05) rotate(30deg);opacity:0}}
+
+.sq-suck{animation:sq-suck var(--ms) cubic-bezier(.3,.9,.6,1) forwards}
+@keyframes sq-suck{0%{opacity:1}14%{transform:scale(1.035)}
+ 30%{background:rgba(255,255,255,.92);border-color:#fff}
+ 66%{transform:scale(.04);opacity:1}100%{transform:scale(.04);opacity:0}}
+
+/* Летящая искра и её убранство — живут в .phone, поэтому не обрезаются. */
+.seed{position:absolute;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;background:#fff;
+ box-shadow:0 0 16px 5px rgba(214,232,255,.95),0 0 40px 12px rgba(140,180,255,.35);pointer-events:none}
+.tail{position:absolute;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:#dbe8ff;
+ box-shadow:0 0 10px 3px rgba(190,220,255,.6);pointer-events:none}
+.rays{position:absolute;width:2px;height:64px;margin:-32px 0 0 -1px;pointer-events:none;
+ background:linear-gradient(rgba(255,255,255,0),#fff 45%,#fff 55%,rgba(255,255,255,0))}
+.target{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;
+ background:radial-gradient(circle,#fff,rgba(200,224,255,.5) 45%,rgba(160,200,255,0) 72%)}
+.spark{position:absolute;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:2px;background:#fff;
+ box-shadow:0 0 8px rgba(200,224,255,.95);pointer-events:none}
+
+</style></head><body>
+<div class="wrap">
+  <div class="phone" id="phone"><div class="suggest" id="stack"></div></div>
+  <div class="panel">
+    <h1>Схлопывание в звезду</h1>
+    <p class="sub">Светлая точка внизу слева — это «звезда человека на карте», цель полёта.
+    Выберите вариант и жмите «Связать». «Нет» гасит за 340 мс, как теперь в коде.</p>
+    <div class="pick" id="pick">
+      <button data-v="1" class="on"><b>1. Прямо</b><i>Белеет, сжимается в точку, точка улетает по прямой. Основа.</i></button>
+      <button data-v="2"><b>2. С замахом</b><i>Точка на миг замирает и разгорается — и только потом срывается. 460 мс.</i></button>
+      <button data-v="3"><b>3. Падающая звезда</b><i>Летит по дуге с хвостом из гаснущих следов. 560 мс.</i></button>
+      <button data-v="4"><b>4. Кинескоп</b><i>Схлопывается в тонкую белую полоску, полоска стягивается в точку.</i></button>
+      <button data-v="5"><b>5. Вихрь</b><i>Втягивается в точку с поворотом и лёгким смазом.</i></button>
+      <button data-v="6"><b>6. Вдох перед схлопыванием</b><i>Карточка чуть раздувается, потом её засасывает в точку.</i></button>
+      <button data-v="7"><b>7. С искрами</b><i>В момент схлопывания в стороны брызжут искры, точка улетает.</i></button>
+      <button data-v="8"><b>8. Крестовой блик</b><i>Перед стартом точка даёт крестообразный блик, как в объективе.</i></button>
+    </div>
+  </div>
+</div>
+<script>
+const PEOPLE=[['Марина Ковалёва','#FF8FC0','М'],['Илья','#6FA8FF','И'],['Саша Петров','#C8D8FF','С'],
+['Дмитрий Орлов','#C8D8FF','Д'],['Аня','#FF8FC0','А'],['Константин','#6FA8FF','К'],['Женя','#FF8FC0','Ж']];
+const STEP=72, FADE=340;
+// [класс схлопывания, сколько длится схлопывание, сколько потом летит искра]
+const V={
+ 1:['sq-plain', 300, 320],
+ 2:['sq-hold',  340, 340],
+ 3:['sq-plain', 300, 520],
+ 4:['sq-crt',   360, 320],
+ 5:['sq-swirl', 340, 320],
+ 6:['sq-suck',  360, 320],
+ 7:['sq-plain', 300, 340],
+ 8:['sq-hold',  340, 360],
+};
+let variant='1', rows=[], next=0;
+const stack=document.getElementById('stack'), phone=document.getElementById('phone');
+
+// Цель полёта — «звезда человека» на карте.
+const target=document.createElement('div');
+target.className='target'; target.style.left='42%'; target.style.top='62%';
+phone.appendChild(target);
+
+document.getElementById('pick').onclick=e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  variant=b.dataset.v;
+  [...document.querySelectorAll('.pick button')].forEach(x=>x.classList.toggle('on',x===b));
+};
+
+function card(i){
+  const [name,tint,letter]=PEOPLE[i%PEOPLE.length];
+  const slot=document.createElement('div'); slot.className='suggest__slot';
+  slot.innerHTML=`<div class="suggest__item">
+    <div class="avatar avatar--letter" style="width:30px;height:30px;border-radius:15px;background:${tint};font-size:13px">${letter}</div>
+    <div class="suggest__body"><div class="suggest__name">${name}</div>
+    <div class="suggest__actions"><button class="suggest__btn" data-go="link">Связать</button>
+    <button class="suggest__btn suggest__btn--ghost" data-go="fade">Нет</button></div></div>
+    <div class="suggest__flash"></div></div>`;
+  slot.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>leave(slot,b));
+  return slot;
+}
+function place(){ rows.forEach((s,i)=>s.style.transform=`translateY(${i*STEP}px)`); }
+
+function dot(cls,x,y){ const d=document.createElement('div'); d.className=cls;
+  d.style.left=x+'px'; d.style.top=y+'px'; phone.appendChild(d); return d; }
+
+// Полёт искры к звезде: по прямой или по дуге, с хвостом и без.
+function fly(x,y,ms,{arc=false,trail=false,rays=false,hold=0}){
+  const box=phone.getBoundingClientRect();
+  const tx=box.width*0.42, ty=box.height*0.62;
+  const seed=dot('seed',x,y);
+  if(rays){
+    for(const turn of [0,90]){
+      const r=dot('rays',x,y); r.style.transform=`rotate(${turn}deg)`;
+      r.animate([{opacity:0,transform:`rotate(${turn}deg) scale(.2)`},
+                 {opacity:1,transform:`rotate(${turn}deg) scale(1)`,offset:.35},
+                 {opacity:0,transform:`rotate(${turn}deg) scale(.3)`}],
+                {duration:260,easing:'ease-out',fill:'forwards'});
+      setTimeout(()=>r.remove(),280);
+    }
+  }
+  const start=()=>{
+    const steps=[];
+    const cx=arc? x+(tx-x)*0.25 : (x+tx)/2, cy=arc? y-90 : (y+ty)/2;
+    for(let i=0;i<=20;i++){
+      const t=i/20, mt=1-t;
+      const px=mt*mt*x+2*mt*t*cx+t*t*tx, py=mt*mt*y+2*mt*t*cy+t*t*ty;
+      steps.push({transform:`translate(${px-x}px,${py-y}px) scale(${1-0.72*t})`,
+                  opacity: t<.75?1:(1-t)/.25});
+    }
+    seed.animate(steps,{duration:ms,easing:arc?'cubic-bezier(.3,.05,.4,1)':'cubic-bezier(.35,0,.25,1)',fill:'forwards'});
+    if(trail){
+      let k=0; const timer=setInterval(()=>{
+        const r=seed.getBoundingClientRect(), pb=phone.getBoundingClientRect();
+        const t=dot('tail',r.left+r.width/2-pb.left,r.top+r.height/2-pb.top);
+        t.animate([{opacity:.9,transform:'scale(1)'},{opacity:0,transform:'scale(.2)'}],
+                  {duration:340,easing:'ease-out',fill:'forwards'});
+        setTimeout(()=>t.remove(),360);
+        if(++k>ms/28) clearInterval(timer);
+      },28);
+    }
+    // Цель отзывается на прилёт.
+    setTimeout(()=>{
+      target.animate([{transform:'scale(1)',opacity:1},{transform:'scale(3.2)',opacity:1,offset:.3},
+                      {transform:'scale(1)',opacity:1}],{duration:420,easing:'ease-out'});
+    },ms-60);
+    setTimeout(()=>seed.remove(),ms+40);
+  };
+  if(hold){
+    seed.animate([{transform:'scale(.3)',opacity:.6},{transform:'scale(1.7)',opacity:1}],
+                 {duration:hold,easing:'ease-out',fill:'forwards'});
+    setTimeout(start,hold);
+  } else start();
+}
+
+function leave(slot,button){
+  const item=slot.firstElementChild, box=item.getBoundingClientRect(), br=button.getBoundingClientRect();
+  const fx=br.left+br.width/2-box.left, fy=br.top+br.height/2-box.top;
+  item.style.setProperty('--fx',fx+'px'); item.style.setProperty('--fy',fy+'px');
+  slot.classList.add('suggest__slot--leaving');
+  slot.querySelectorAll('button').forEach(b=>b.disabled=true);
+
+  if(button.dataset.go==='fade'){
+    item.classList.add('suggest__item--fade');
+    setTimeout(()=>{ rows=rows.filter(s=>s!==slot); slot.remove(); place(); add(); },FADE);
+    return;
+  }
+
+  const [cls,squash,flight]=V[variant];
+  item.style.transformOrigin=`${fx}px ${fy}px`;
+  item.style.setProperty('--ms',squash+'ms');
+  item.classList.add(cls);
+
+  const pb=phone.getBoundingClientRect();
+  const px=br.left+br.width/2-pb.left, py=br.top+br.height/2-pb.top;
+
+  if(variant==='7'){
+    setTimeout(()=>{
+      for(let k=0;k<14;k++){
+        const a=Math.PI*2*k/14+Math.random()*.4, d=40+Math.random()*60;
+        const s=dot('spark',px,py);
+        s.animate([{transform:'translate(0,0) scale(1.3)',opacity:1},
+                   {transform:`translate(${Math.cos(a)*d}px,${Math.sin(a)*d}px) scale(.2)`,opacity:0}],
+                  {duration:320+Math.random()*120,easing:'cubic-bezier(.1,.7,.3,1)',fill:'forwards'});
+        setTimeout(()=>s.remove(),460);
+      }
+    },squash*0.55);
+  }
+
+  setTimeout(()=>fly(px,py,flight,{
+    arc: variant==='3', trail: variant==='3', rays: variant==='8',
+    hold: variant==='2'?170:(variant==='8'?120:0),
+  }),squash*0.62);
+
+  const total=squash*0.62+flight+(variant==='2'?170:0)+(variant==='8'?120:0);
+  setTimeout(()=>{ rows=rows.filter(s=>s!==slot); slot.remove(); place(); add(); },squash);
+  void total;
+}
+function add(){ if(rows.length>=3)return; const s=card(next++); stack.appendChild(s); rows.push(s); place(); }
+add();add();add();
+</script></body></html>
