@@ -1,7 +1,3 @@
-// Обёртка над window.Telegram.WebApp. Всё, что знает о Telegram, живёт здесь:
-// приложение должно открываться и вне Telegram (например, при отладке вёрстки),
-// не падая на отсутствующем SDK.
-
 type ThemeParams = { bg_color?: string };
 
 type TelegramWebApp = {
@@ -37,8 +33,6 @@ export function initData(): string {
 	return webApp()?.initData ?? '';
 }
 
-// Разворачиваем окно на всю высоту и красим шапку в цвет неба, чтобы карта
-// не выглядела вклеенной в чужой интерфейс.
 export function prepareWebApp(): void {
 	const app = webApp();
 	if (!app) return;

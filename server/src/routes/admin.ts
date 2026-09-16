@@ -1,6 +1,4 @@
-// Админка (разделы 10, 11). Права проверяются на сервере, отдельно на каждом
-// маршруте: клиентское «не показывать кнопку» защитой не считается.
-// Каждое изменение пишется в AdminAudit.
+// Админка: права проверяются на сервере, изменения пишутся в AdminAudit.
 import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import { AGE_MAX, AGE_MIN, GENDERS } from '../../../shared/config.js';
@@ -13,8 +11,7 @@ import { requireAdmin, requireSession } from '../auth/middleware.js';
 import { markLayoutDirty } from '../layout/state.js';
 import { isRecomputing, recomputeLayout } from '../layout/runner.js';
 
-// Тестовые пользователи живут в зарезервированном отрицательном диапазоне:
-// Telegram id всегда положительные, поэтому коллизия невозможна.
+// Telegram id всегда положительные, поэтому отрицательные свободны под тестовых.
 const TEST_ID_START = -1000000n;
 
 async function nextTestId(tx: Prisma.TransactionClient): Promise<bigint> {
@@ -81,7 +78,6 @@ export function adminRouter(): Router {
 		}
 	});
 
-	// Связи конкретного пользователя: раскрываются по клику на число в таблице.
 	router.get('/users/:id/links', async (req, res, next) => {
 		try {
 			const id = bigint(req.params.id, 'id');
@@ -142,8 +138,6 @@ export function adminRouter(): Router {
 			if (has(parsed, 'displayName')) {
 				const name = cleanName(str(parsed.displayName, 'displayName', { max: 64 }));
 				data.customName = name;
-				// Админское переименование запирает имя: вернуть прежнее
-				// пользователь уже не сможет.
 				data.nameLockedByAdmin = true;
 				changes.displayName = name;
 			}
@@ -261,10 +255,8 @@ export function adminRouter(): Router {
 		}
 	});
 
-	// Два режима (две кнопки в админке):
-	//   full   — с нуля, от подсолнуха: вытаскивает небо из слежавшейся раскладки;
-	//   warm   — от сохранённых мест, но дольше и горячее инкрементального:
-	//            картинка меняется мягко, звёзды остаются примерно там же.
+	// full — с нуля, от подсолнуха: вытаскивает небо из слежавшейся раскладки;
+	// warm — от сохранённых мест, но дольше: картинка меняется мягко.
 	router.post('/layout/recompute', async (req, res, next) => {
 		try {
 			if (isRecomputing()) throw conflict('layout_busy', 'Пересчёт уже идёт');

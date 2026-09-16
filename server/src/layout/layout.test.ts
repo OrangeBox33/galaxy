@@ -1,4 +1,3 @@
-// Тесты раскладки — самая важная часть проверки (раздел 13 ТЗ).
 // Раскладка детерминирована, поэтому все проверки точные, без «примерно похоже».
 import { describe, expect, it } from 'vitest';
 import { computeLayout, type Point } from '../../../shared/layout/index.js';
@@ -12,7 +11,6 @@ const R = P.R_MAX;
 
 type Graph = { ids: bigint[]; edges: [number, number][] };
 
-// Граф-звезда: один хаб и заданное число листьев.
 function star(hubIndex: number, leaves: number, offset: number): [number, number][] {
 	const edges: [number, number][] = [];
 	for (let i = 0; i < leaves; i += 1) edges.push([hubIndex, offset + i]);
@@ -29,8 +27,7 @@ function distance(point: Point): number {
 
 describe('раскладка', () => {
 	it('одна звезда: хаб садится в центр', () => {
-		// 1 хаб + 12 листьев. Отталкивание от периферии гасится по симметрии,
-		// и хабу остаётся только центр.
+		// Отталкивание от периферии гасится по симметрии — хабу остаётся только центр.
 		const graph: Graph = { ids: ids(13), edges: star(0, 12, 1) };
 		const result = computeLayout({ ...graph, full: true });
 
@@ -39,17 +36,13 @@ describe('раскладка', () => {
 	});
 
 	it('двойная звезда: хабы расходятся симметрично вокруг общего центра', () => {
-		// Два хаба по 12 листьев, между собой не связаны.
 		const total = 26;
 		const graph: Graph = {
 			ids: ids(total),
 			edges: [...star(0, 12, 2), ...star(1, 12, 14)],
 		};
 
-		// Центр масс проверяем ДО нормализации: иначе проверка бессмысленна —
-		// шаг 7.7.1 сдвигает центроид в (0,0) арифметически, независимо от того,
-		// работает физика или нет. Здесь же видно, что систему держит в центре
-		// сама радиальная привязка.
+		// Центр масс — до нормализации: она сдвигает центроид в (0,0) арифметически.
 		const centrality = computeCentrality(graph);
 		const nodes = graph.ids.map((id, i) =>
 			makeNode(id, centrality.degree[i], centrality.value[i]),
@@ -75,45 +68,88 @@ describe('раскладка', () => {
 		const centroid = Math.hypot(sumX / sumMass, sumY / sumMass);
 		expect(centroid).toBeLessThan(0.05 * R);
 
-		// А после нормализации проверяем саму картину двойной звезды.
 		const result = computeLayout({ ...graph, full: true });
 		const first = result.nodes[0];
 		const second = result.nodes[1];
 		const d1 = distance(first);
 		const d2 = distance(second);
 
-		// Хабы действительно разошлись, а не слиплись в центре.
 		expect(Math.min(d1, d2)).toBeGreaterThan(0.05 * R);
-		// Расстояния до центра различаются не больше чем на 15%.
 		expect(Math.abs(d1 - d2) / Math.max(d1, d2)).toBeLessThan(0.15);
-		// И они по разные стороны от центра: середина между ними — центр карты.
 		const cos = (first.x * second.x + first.y * second.y) / (d1 * d2);
 		expect(cos).toBeLessThan(-0.85);
 	});
 
-	it('монотонность: чем больше степень, тем ближе к центру', () => {
-		const random = mulberry32(12345);
-		const n = 60;
+	it('место в компании: кто знает своих лучше, тот ближе к её середине', () => {
+		// Случай заказчика дословно: компания из 50, двое знают в ней всех.
+		const BIG = 50;
+		const SMALL = 14;
+		const random = mulberry32(2024);
 		const edges: [number, number][] = [];
 		const seen = new Set<string>();
-		// Предпочтительное присоединение: узлы с меньшим индексом получают
-		// больше связей — так в графе появляются и хабы, и одиночки.
-		for (let i = 1; i < n; i += 1) {
-			const links = 1 + Math.floor(random() * 3);
-			for (let k = 0; k < links; k += 1) {
-				const j = Math.floor(random() ** 2 * i);
-				const key = `${Math.min(i, j)}-${Math.max(i, j)}`;
-				if (i === j || seen.has(key)) continue;
-				seen.add(key);
-				edges.push([Math.min(i, j), Math.max(i, j)]);
+		const link = (a: number, b: number): void => {
+			if (a === b) return;
+			const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+			if (seen.has(key)) return;
+			seen.add(key);
+			edges.push([Math.min(a, b), Math.max(a, b)]);
+		};
+
+		for (let i = 2; i < BIG; i += 1) {
+			link(0, i);
+			link(1, i);
+		}
+		link(0, 1);
+		for (let i = 2; i < BIG; i += 1) {
+			for (let k = 0; k < 2; k += 1) {
+				link(i, 2 + Math.floor(random() * (BIG - 2)));
 			}
 		}
 
-		const result = computeLayout({ ids: ids(n), edges, full: true });
-		const degrees = result.nodes.map((node) => node.degree);
-		const distances = result.nodes.map((node) => distance(node));
+		// Вторая компания и мостик: иначе первая была бы всем небом.
+		for (let i = BIG; i < BIG + SMALL; i += 1) {
+			for (let j = i + 1; j < BIG + SMALL; j += 1) {
+				if (random() < 0.5) link(i, j);
+			}
+			if (i + 1 < BIG + SMALL) link(i, i + 1);
+		}
+		link(2, BIG);
 
-		expect(spearman(degrees, distances)).toBeLessThanOrEqual(-0.6);
+		const result = computeLayout({ ids: ids(BIG + SMALL), edges, full: true });
+
+		const members = Array.from({ length: BIG }, (_, i) => i);
+		const centre = {
+			x: members.reduce((sum, i) => sum + result.nodes[i].x, 0) / BIG,
+			y: members.reduce((sum, i) => sum + result.nodes[i].y, 0) / BIG,
+		};
+		const fromCentre = (i: number): number =>
+			Math.hypot(result.nodes[i].x - centre.x, result.nodes[i].y - centre.y);
+
+		// Связи внутри компании: мостик наружу в счёт не идёт.
+		const inside = members.map(
+			(i) => edges.filter(([a, b]) => (a === i && b < BIG) || (b === i && a < BIG)).length,
+		);
+
+		const distances = members.map(fromCentre);
+		const ranked = [...distances].sort((a, b) => a - b);
+		const median = ranked[Math.floor(ranked.length / 2)];
+
+		expect(fromCentre(0)).toBeLessThan(median * 0.75);
+		expect(fromCentre(1)).toBeLessThan(median * 0.75);
+
+		const closer = (i: number): number => distances.filter((d) => d < fromCentre(i)).length;
+		expect(closer(0)).toBeLessThan(6);
+		expect(closer(1)).toBeLessThan(6);
+
+		// Сравниваем четверти, а не ранговой связью по всем: у 48 из 50 число
+		// своих связей почти одинаково, и Спирмен на них считает в основном шум.
+		const byInside = members
+			.map((i, k) => ({ i, inside: inside[k] }))
+			.sort((a, b) => b.inside - a.inside);
+		const quarter = Math.floor(BIG / 4);
+		const mean = (list: { i: number }[]): number =>
+			list.reduce((sum, entry) => sum + fromCentre(entry.i), 0) / list.length;
+		expect(mean(byInside.slice(0, quarter))).toBeLessThan(mean(byInside.slice(-quarter)));
 	});
 
 	it('детерминизм: два прогона дают одинаковые координаты', () => {
@@ -146,13 +182,15 @@ describe('раскладка', () => {
 			base.nodes.map((node) => [node.id, { x: node.x, y: node.y }]),
 		);
 
-		// Добавляем 101-го, связанного с узлом 1.
 		const grownIds = [...ids(n), BigInt(n + 1)];
 		const grownEdges: [number, number][] = [...edges, [0, n]];
 		const grown = computeLayout({
 			ids: grownIds,
 			edges: grownEdges,
 			previous,
+			// Как на бою: без прошлого коэффициента растяжения пересчёт стартует
+			// с растянутого неба и перетасует звёзды.
+			previousScale: base.scale,
 			anchors: new Map([[BigInt(n + 1), 1n]]),
 		});
 
@@ -172,7 +210,6 @@ describe('раскладка', () => {
 		const graph: Graph = { ids: ids(30), edges: star(0, 12, 1).concat(star(13, 8, 20)) };
 		const original = computeLayout({ ...graph, full: true });
 
-		// Поворот на 90° и отражение по оси Y.
 		const theta = Math.PI / 2;
 		const distorted = original.nodes.map((node) => {
 			const x = -node.x;
@@ -231,7 +268,6 @@ describe('раскладка', () => {
 	});
 });
 
-// Корреляция Спирмена: сравниваем ранги, а не значения.
 function spearman(a: number[], b: number[]): number {
 	const rank = (values: number[]): number[] => {
 		const order = values

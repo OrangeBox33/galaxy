@@ -1,12 +1,10 @@
-// Тонкая обёртка над Bot API. Никаких библиотек: нам нужны два метода.
 import { env } from '../env.js';
 
 const BASE = `https://api.telegram.org/bot${env.botToken}`;
 
 export type TelegramError = Error & { code?: number; fatal?: boolean };
 
-// «Пользователь не начинал диалог с ботом» и «бот заблокирован» — это не сбой
-// связи, а окончательный отказ: ретраить такое бессмысленно (раздел 12).
+// Не сбой связи, а окончательный отказ: ретраить такое бессмысленно.
 function isFatal(description: string): boolean {
 	const text = description.toLowerCase();
 	return (

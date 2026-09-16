@@ -1,5 +1,3 @@
-// Тот же генератор, что и на сервере: пыль, фазы дрейфа и углы тусклых точек
-// обязаны быть одинаковыми при каждом заходе.
 export function mulberry32(seed: number): () => number {
 	let state = seed >>> 0;
 	return () => {
@@ -11,7 +9,6 @@ export function mulberry32(seed: number): () => number {
 	};
 }
 
-// Устойчивое число из строки: id пользователя или токена приглашения.
 export function hashString(value: string): number {
 	let hash = 2166136261;
 	for (let i = 0; i < value.length; i += 1) {

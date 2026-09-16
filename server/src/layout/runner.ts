@@ -1,5 +1,3 @@
-// Пересчёт раскладки на данных из БД и таймер, который его запускает
-// (раздел 7.6–7.8).
 import { db } from '../db.js';
 import { env } from '../env.js';
 import { log } from '../lib/log.js';
@@ -8,8 +6,7 @@ import { computeLayoutInThread } from './pool.js';
 import { LAYOUT_PARAMS } from '../../../shared/layout/params.js';
 import { lastGraphChangeAt, noteGraphChanged } from './state.js';
 
-// Пересчёты не должны накладываться. Процесс pm2 ровно один, поэтому
-// простого булева мьютекса в памяти достаточно.
+// Процесс pm2 ровно один, поэтому булева мьютекса в памяти достаточно.
 let running = false;
 
 export function isRecomputing(): boolean {
@@ -17,10 +14,7 @@ export function isRecomputing(): boolean {
 }
 
 export type RecomputeOptions = {
-	// full — начать с подсолнуха, как при первом запуске.
 	full?: boolean;
-	// 'long' — тёплый пересчёт: стартуем с сохранённых мест, но даём столько же
-	// времени, сколько полному. Небо перекладывается мягко, без телепортаций.
 	iterations?: 'long';
 };
 
@@ -54,8 +48,7 @@ export async function recomputeLayout(options: RecomputeOptions = {}): Promise<{
 			edges.push([a, b]);
 		}
 
-		// «Узел уже был на небе» = он существовал на момент прошлого пересчёта.
-		// Отдельного флага для этого не нужно: хватает createdAt и computedAt.
+		// «Узел уже был на небе» = createdAt ≤ computedAt, отдельный флаг не нужен.
 		const previous = new Map<bigint, Point>();
 		const version = state?.version ?? 0;
 		const computedAt = state?.computedAt ?? null;
@@ -78,8 +71,14 @@ export async function recomputeLayout(options: RecomputeOptions = {}): Promise<{
 			}
 		}
 
-		// Считаем в отдельном потоке: секунда-две расчёта не должна
-		// подвешивать ответы на запросы.
+		// Без прошлого коэффициента растяжения пересчёт начнёт с растянутого
+		// неба и перетасует звёзды по дороге.
+		const savedParams = (state?.params ?? null) as { scale?: number } | null;
+		const previousScale =
+			typeof savedParams?.scale === 'number' && savedParams.scale > 0
+				? savedParams.scale
+				: undefined;
+
 		const result = await computeLayoutInThread({
 			ids,
 			edges,
@@ -87,6 +86,7 @@ export async function recomputeLayout(options: RecomputeOptions = {}): Promise<{
 			anchors,
 			full: options.full,
 			long: options.iterations === 'long',
+			previousScale,
 		});
 
 		await db.$transaction([
@@ -108,13 +108,13 @@ export async function recomputeLayout(options: RecomputeOptions = {}): Promise<{
 					version: version + 1,
 					dirty: false,
 					computedAt: new Date(),
-					params: LAYOUT_PARAMS,
+					params: { ...LAYOUT_PARAMS, scale: result.scale },
 				},
 				update: {
 					version: version + 1,
 					dirty: false,
 					computedAt: new Date(),
-					params: LAYOUT_PARAMS,
+					params: { ...LAYOUT_PARAMS, scale: result.scale },
 				},
 			}),
 		]);
@@ -130,8 +130,6 @@ export async function recomputeLayout(options: RecomputeOptions = {}): Promise<{
 	}
 }
 
-// Таймер раз в секунду смотрит на флаг и ждёт тишины в LAYOUT_RECOMPUTE_DEBOUNCE_MS
-// после последнего изменения.
 export function startLayoutScheduler(): void {
 	const timer = setInterval(() => {
 		void tick();

@@ -1,4 +1,3 @@
-// Единственный экземпляр PrismaClient на процесс.
 import { PrismaClient } from '@prisma/client';
 import { env } from './env.js';
 

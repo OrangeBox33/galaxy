@@ -1,12 +1,10 @@
-// Проверка подписи initData (раздел 13). Токен здесь фальшивый и совпадает
-// с тем, что подставляет vitest.config.ts.
+// Токен здесь фальшивый и совпадает с тем, что подставляет vitest.config.ts.
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { verifyInitData } from './initData.js';
 
 const BOT_TOKEN = '123456:TEST-TOKEN-FOR-UNIT-TESTS';
 
-// Собираем initData так же, как это делает Telegram.
 function signInitData(fields: Record<string, string>): string {
 	const pairs = Object.entries(fields)
 		.map(([key, value]) => `${key}=${value}`)
@@ -53,7 +51,6 @@ describe('initData', () => {
 		const now = Date.now();
 		const raw = signInitData({ user, auth_date: String(Math.floor(now / 1000)) });
 
-		// Меняем имя внутри подписанного блока, подпись оставляем прежней.
 		const tampered = raw.replace('%D0%90%D0%BD%D1%8F', '%D0%90%D0%BD%D0%B0');
 		expect(tampered).not.toBe(raw);
 		expect(verifyInitData(tampered, now)).toBeNull();
@@ -64,7 +61,6 @@ describe('initData', () => {
 		const raw = signInitData({ user, auth_date: String(Math.floor(now / 1000)) });
 		const params = new URLSearchParams(raw);
 		const hash = params.get('hash')!;
-		// Портим ровно один символ подписи.
 		params.set('hash', (hash[0] === 'a' ? 'b' : 'a') + hash.slice(1));
 
 		expect(verifyInitData(params.toString(), now)).toBeNull();

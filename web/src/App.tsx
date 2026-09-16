@@ -9,8 +9,6 @@ import { Admin } from './screens/Admin';
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; message: string };
 
-// Роутинг без библиотеки: путей всего два, а подпуть /galaxy нужно срезать
-// в любом случае (раздел 2.2).
 function currentRoute(): string {
 	const path = window.location.pathname;
 	const trimmed = path.startsWith(BASE_PATH) ? path.slice(BASE_PATH.length) : path;

@@ -1,7 +1,4 @@
-// Демонстрационное небо: 80 тестовых пользователей с реалистичной структурой —
-// три плотных комьюнити, два хаба-связки между ними и десяток одиночек
-// (раздел 13). Нужен, чтобы оценить картинку глазами до прихода живых людей.
-//
+// Демонстрационное небо: 80 тестовых звёзд — три комьюнити, два хаба-связки, одиночки.
 //   npm run seed:demo            добавить демо-звёзды
 //   npm run seed:demo -- --wipe  сначала снести прежние тестовые
 import { db } from '../db.js';
@@ -14,7 +11,6 @@ const FIRST_NAMES_F = ['Аня','Марина','Лера','Оля','Катя','�
 const FIRST_NAMES_M = ['Никита','Паша','Дима','Серёга','Костя','Артём','Миша','Ваня','Лёха','Гриша','Фёдор','Тимур','Рома','Женя','Толя'];
 const LAST_NAMES = ['Волков','Орлов','Зимин','Кедров','Морев','Лунин','Соколов','Быстров','Нилов','Гордеев','Шилов','Ясин'];
 
-// Комьюнити: имя, размер, плотность связей внутри.
 const COMMUNITIES = [
 	{ name: 'универ', size: 26, density: 0.22 },
 	{ name: 'работа', size: 22, density: 0.26 },
@@ -32,8 +28,7 @@ async function main(): Promise<void> {
 		console.log(`Снесено тестовых пользователей: ${removed.count}`);
 	}
 
-	// Свободный кусок отрицательного диапазона: тестовые id начинаются
-	// с −1000000 и идут вниз.
+	// Тестовые id идут вниз от −1000000, в зарезервированном отрицательном диапазоне.
 	const lowest = await db.user.findFirst({
 		where: { id: { lt: 0n } },
 		orderBy: { id: 'asc' },
@@ -80,7 +75,6 @@ async function main(): Promise<void> {
 		links.push({ aId, bId });
 	}
 
-	// Комьюнити: внутри плотно, но не полный граф.
 	const byCommunity = new Map<string, Person[]>();
 	for (const community of COMMUNITIES) {
 		const members: Person[] = [];
@@ -92,13 +86,11 @@ async function main(): Promise<void> {
 				if (random() < community.density) link(members[i].id, members[j].id);
 			}
 		}
-		// Чтобы никто не остался в комьюнити без единой связи.
 		for (let i = 1; i < members.length; i += 1) {
 			link(members[i].id, members[Math.floor(random() * i)].id);
 		}
 	}
 
-	// Хабы-связки: знают всех понемногу в каждом комьюнити.
 	for (let b = 0; b < BRIDGES; b += 1) {
 		const hub = await create('связка');
 		for (const community of COMMUNITIES) {
@@ -110,7 +102,6 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// Одиночки: одна связь или вовсе ни одной.
 	for (let i = 0; i < LONERS; i += 1) {
 		const loner = await create('одиночка');
 		if (random() < 0.6) {
@@ -122,7 +113,6 @@ async function main(): Promise<void> {
 
 	await db.link.createMany({ data: links, skipDuplicates: true });
 
-	// Денормализованная степень пересчитывается вместе с раскладкой.
 	const result = await recomputeLayout({ full: true });
 
 	console.log(

@@ -1,4 +1,3 @@
-// Сессия: JWT в httpOnly-куке. Раздел 4.2 ТЗ.
 import jwt from 'jsonwebtoken';
 import type { Request, Response } from 'express';
 import { BASE_PATH, SESSION_COOKIE, SESSION_MAX_AGE_SEC } from '../../../shared/config.js';
@@ -12,10 +11,8 @@ export function issueSession(res: Response, userId: bigint): void {
 		expiresIn: SESSION_MAX_AGE_SEC,
 	});
 
-	// Все три атрибута обязательны и ни один нельзя опустить:
-	// SameSite=None — иначе кука не переживёт iframe Telegram;
-	// Secure — обязателен вместе с SameSite=None;
-	// Path=/galaxy — чтобы сессия не уходила в соседние приложения домена.
+	// SameSite=None — иначе кука не переживёт iframe Telegram; Secure обязателен
+	// вместе с ним; Path=/galaxy — чтобы сессия не уходила соседям по домену.
 	res.cookie(SESSION_COOKIE, token, {
 		httpOnly: true,
 		secure: true,
@@ -34,8 +31,7 @@ export function clearSession(res: Response): void {
 	});
 }
 
-// Разбор заголовка Cookie руками: ради одного значения тащить отдельную
-// библиотеку незачем.
+// Разбор Cookie руками: ради одного значения тащить библиотеку незачем.
 function readCookie(req: Request, name: string): string | null {
 	const header = req.headers.cookie;
 	if (!header) return null;

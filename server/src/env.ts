@@ -1,11 +1,9 @@
-// Чтение и проверка переменных окружения. Руками, без библиотек валидации (раздел 2.7 ТЗ).
+// Чтение и проверка переменных окружения. Руками, без библиотек валидации.
 // Падаем на старте, а не при первом запросе: тогда pm2 сразу покажет проблему в логе.
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// .env лежит рядом с рабочей папкой процесса (/root/dev/galaxy/dist/.env) и в деплое
-// не участвует. Node умеет читать его сам начиная с 20.6; если файла нет — значит,
-// переменные пришли из окружения, это тоже нормально.
+// .env лежит рядом с рабочей папкой (/root/dev/galaxy/dist/.env) и в деплое не участвует.
 const envFile = resolve(process.cwd(), '.env');
 if (existsSync(envFile)) {
 	process.loadEnvFile(envFile);
@@ -69,7 +67,6 @@ export const env = Object.freeze({
 	adminIds,
 	avatarDir: str('AVATAR_DIR'),
 	layoutDebounceMs: num('LAYOUT_RECOMPUTE_DEBOUNCE_MS', 4000),
-	// Необязательное: где лежит собранный клиент. По умолчанию — public/ рядом с dist.
 	publicDir: process.env.PUBLIC_DIR?.trim() || '',
 	isProduction: process.env.NODE_ENV === 'production',
 });

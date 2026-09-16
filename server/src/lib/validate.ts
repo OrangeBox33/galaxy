@@ -1,9 +1,6 @@
-// Разбор тел запросов. zod и любые другие библиотеки схемной валидации в проекте
-// запрещены (раздел 2.8), поэтому здесь набор маленьких функций: каждая либо
-// возвращает приведённое значение, либо бросает BadRequest с кодом поля.
-//
-// Правило: каждый маршрут разбирает тело явно, поле за полем, в начале обработчика.
-// `req.body as SomeType` — это не валидация, а её имитация.
+// Библиотеки схемной валидации в проекте запрещены: вместо них маленькие функции —
+// каждая возвращает приведённое значение либо бросает BadRequest с кодом поля.
+// Приведение `req.body as SomeType` валидацией не считается.
 import { BadRequest } from './errors.js';
 
 export function str(
@@ -26,7 +23,6 @@ export function str(
 }
 
 export function int(v: unknown, field: string, opts: { min?: number; max?: number } = {}): number {
-	// Из формы число может прийти строкой — это нормально, лишь бы оно было целым.
 	const value = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
 	if (typeof value !== 'number' || !Number.isInteger(value)) {
 		throw new BadRequest(field, 'invalid_field', `Поле ${field} должно быть целым числом`);
@@ -40,8 +36,8 @@ export function int(v: unknown, field: string, opts: { min?: number; max?: numbe
 	return value;
 }
 
-// Идентификаторы Telegram не влезают в Number без потерь, поэтому по проводу они
-// всегда ходят строками. Отрицательные разрешены: это тестовые пользователи.
+// Id Telegram не влезают в Number без потерь и по проводу ходят строками.
+// Отрицательные разрешены: это тестовые пользователи.
 export function bigint(v: unknown, field: string): bigint {
 	const raw = typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : v;
 	if (typeof raw !== 'string' || !/^-?\d{1,19}$/.test(raw.trim())) {
@@ -68,8 +64,7 @@ export function bool(v: unknown, field: string): boolean {
 	throw new BadRequest(field, 'invalid_field', `Поле ${field} должно быть true или false`);
 }
 
-// null и undefined превращаются в null; всё остальное отдаётся разбирающей функции.
-// Так поля профиля можно и задать, и очистить, не путая «не менять» с «стереть».
+// Так поле профиля можно и задать, и очистить, не путая «не менять» со «стереть».
 export function optional<T>(v: unknown, fn: () => T): T | null {
 	if (v === null || v === undefined || v === '') return null;
 	return fn();

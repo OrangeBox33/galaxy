@@ -1,18 +1,16 @@
-// Выравнивание новой раскладки по предыдущей (раздел 7.7, шаг 3).
-// Симуляция свободна относительно поворота и отражения: без этого шага небо
-// после пересчёта окажется перевёрнутым, и люди перестанут узнавать свою картину.
+// Симуляция свободна относительно поворота и отражения: без выравнивания
+// по предыдущей раскладке (раздел 7.7, шаг 3) небо после пересчёта перевернётся.
 
 export type Transform = { theta: number; mirror: boolean };
 
 export type Pair = {
-	px: number; // новая раскладка
+	px: number;
 	py: number;
-	qx: number; // предыдущая
+	qx: number;
 	qy: number;
-	w: number; // вес, равный массе узла
+	w: number;
 };
 
-// Оптимальный поворот для набора пар при заданном отражении.
 function bestAngle(pairs: Pair[], mirror: boolean): { theta: number; residual: number } {
 	let num = 0;
 	let den = 0;
@@ -37,8 +35,6 @@ function bestAngle(pairs: Pair[], mirror: boolean): { theta: number; residual: n
 	return { theta, residual };
 }
 
-// Считаем оба варианта — исходный и отражённый по оси Y, каждый со своим
-// углом, — и берём тот, у которого невязка меньше.
 export function bestTransform(pairs: Pair[]): Transform | null {
 	if (pairs.length < 2) return null;
 

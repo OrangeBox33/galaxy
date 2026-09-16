@@ -25,8 +25,6 @@ export function requireSession(req: Request, _res: Response, next: NextFunction)
 	next();
 }
 
-// Заблокированного пользователя не пускаем дальше входа: звезда гаснет,
-// а сам он видит экран «доступ закрыт».
 export async function requireActiveUser(
 	req: Request,
 	_res: Response,

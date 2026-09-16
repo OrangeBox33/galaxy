@@ -1,6 +1,6 @@
-// Представления сущностей для API. Все id — строки (раздел 3, 10).
 import type { User } from '@prisma/client';
 import { isAdmin } from '../env.js';
+import { inviteUrl, SHARE_TEXT } from './inviteLink.js';
 import { displayName } from './names.js';
 
 export type ProfileView = {
@@ -13,10 +13,12 @@ export type ProfileView = {
 	isTest: boolean;
 	nameLockedByAdmin: boolean;
 	needsProfileSetup: boolean;
+	// Ссылка постоянная: одна и та же на все входы.
+	inviteUrl: string | null;
+	shareText: string;
 };
 
-// Первый вход: человек ещё ничего о себе не указал. Показываем экран профиля
-// поверх карты — но пропустить его можно, тогда звезда светится нейтрально-белым.
+// Первый вход: о себе ничего не указано — показываем профиль, но пропустить можно.
 function needsSetup(user: User): boolean {
 	return user.customName === null && user.age === null && user.gender === 'UNSPECIFIED';
 }
@@ -32,5 +34,7 @@ export function toProfile(user: User): ProfileView {
 		isTest: user.isTest,
 		nameLockedByAdmin: user.nameLockedByAdmin,
 		needsProfileSetup: needsSetup(user),
+		inviteUrl: user.inviteToken ? inviteUrl(user.inviteToken) : null,
+		shareText: SHARE_TEXT,
 	};
 }

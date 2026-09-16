@@ -1,12 +1,6 @@
-// Снимки графа: сохранить текущее небо целиком и вернуться к нему одной командой.
-// Нужно, чтобы можно было безбоязненно ставить опыты на живых данных.
-//
-//   node server/src/lib/snapshot.js save <имя>
-//   node server/src/lib/snapshot.js restore <имя>
-//   node server/src/lib/snapshot.js list
-//
-// Это не замена резервным копиям: там честный pg_dump всей базы по расписанию,
-// здесь — быстрый слепок графа для экспериментов.
+// Быстрый слепок графа для опытов на живых данных. Не замена резервным копиям:
+// те снимает pg_dump по расписанию.
+//   node server/src/lib/snapshot.js save|restore <имя> | list
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +18,6 @@ type Snapshot = {
 	layout: Record<string, unknown> | null;
 };
 
-// BigInt и даты в JSON не ходят — приводим к строкам.
 function plain(value: unknown): unknown {
 	if (typeof value === 'bigint') return { __bigint: value.toString() };
 	if (value instanceof Date) return { __date: value.toISOString() };

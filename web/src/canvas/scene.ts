@@ -1,38 +1,26 @@
-// Сцена: то, что рисуется на канвасе. Держит собственные копии узлов,
-// потому что у картинки своя жизнь — переезды, вспышки, дрейф и мерцание
-// происходят между запросами графа, а не в ответ на них.
 import type { Graph, GraphNode, PendingInvite } from '../api/types';
 import { haloColor, type RGB } from './palette';
 import { randomFor } from './prng';
-// Радиус звезды живёт в общем коде: им же раскладка разводит звёзды,
-// чтобы крупные не налезали на соседей.
+// Радиус — из общего кода: им же раскладка разводит звёзды, чтобы не налезали друг на друга.
 import { starRadius } from '../../../shared/layout/params';
 
-// Переезд при пересчёте раскладки — 1200 мс, никаких телепортаций (8.4).
 const MOVE_MS = 1200;
-// Появление новой звезды — вспышка за 900 мс.
 const APPEAR_MS = 900;
-// Линия к новой звезде прочерчивается за 400 мс.
 export const DRAW_EDGE_MS = 400;
-// Тусклая точка приглашения стоит на этом расстоянии от пригласившего.
 const INVITE_RADIUS = 52;
 
 export type Star = {
 	id: string;
 	node: GraphNode;
 
-	// Куда узел едет и откуда. Между ними интерполяция easeInOutCubic.
 	fromX: number;
 	fromY: number;
 	toX: number;
 	toY: number;
 	moveStart: number;
 
-	// Момент появления: null — звезда была здесь и раньше.
 	appearAt: number | null;
 
-	// Параметры дрейфа и мерцания, посеянные по id: при каждом заходе
-	// звезда качается одинаково.
 	amp: number;
 	freqX: number;
 	freqY: number;
@@ -41,17 +29,11 @@ export type Star = {
 	twinklePhase: number;
 
 	radius: number;
-	// Личный множитель числа языков: приходит с сервера, за человеком навсегда.
 	flame: number;
 	halo: RGB;
 
-	// Глубина: −1 — дальний план, +1 — ближний. Берётся из id, поэтому
-	// у каждого человека она своя и постоянная.
 	depth: number;
 
-	// Смещение от «домашнего» места и его скорость. Ими живёт только
-	// перетаскивание на резинках: серверных координат это не касается,
-	// после отпускания смещение само затухает в ноль.
 	ox: number;
 	oy: number;
 	ovx: number;
@@ -70,7 +52,6 @@ export type InviteDot = {
 export type Scene = {
 	stars: Map<string, Star>;
 	order: Star[];
-	// Те же звёзды, от крупных к мелким: венец достаётся сначала им.
 	byRadius: Star[];
 	edges: [Star, Star][];
 	invites: InviteDot[];
@@ -105,18 +86,13 @@ function makeStar(node: GraphNode, now: number, isNew: boolean): Star {
 		toY: node.y,
 		moveStart: now - MOVE_MS,
 		appearAt: isNew ? now : null,
-		// Хабы почти неподвижны, периферия плавает сильнее. Амплитуда меньше
-		// расстояния между соседями, поэтому наложений дрейф не создаёт.
 		amp: 6 / (1 + 0.35 * node.degree),
-		// Периоды 8–20 секунд.
 		freqX: (Math.PI * 2) / (8 + random() * 12),
 		freqY: (Math.PI * 2) / (8 + random() * 12),
 		phaseX: random() * Math.PI * 2,
 		phaseY: random() * Math.PI * 2,
 		twinklePhase: random() * Math.PI * 2,
 		halo: haloColor(node.gender, node.isBlocked),
-		// Хабы держим ближе к середине по глубине: они и так самые крупные,
-		// и на переднем плане забивали бы всё вокруг.
 		depth: (random() * 2 - 1) * (1 - 0.4 * node.centrality),
 		ox: 0,
 		oy: 0,
@@ -134,7 +110,6 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 	for (const node of graph.nodes) {
 		const existing = scene.stars.get(node.id);
 		if (!existing) {
-			// В первый заход всё небо уже существует — вспышками оно не осыпается.
 			stars.set(node.id, makeStar(node, now, !first));
 			continue;
 		}
@@ -144,10 +119,8 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 		existing.flame = node.flame;
 		existing.halo = haloColor(node.gender, node.isBlocked);
 
-		// Сравниваем сами координаты, а не версию раскладки: предсказанные
-		// клиентом места приходят с той же версией, что и прежние серверные.
+		// Сравниваем координаты, а не версию: предсказанные места приходят с прежней версией.
 		if (existing.toX !== node.x || existing.toY !== node.y) {
-			// Едем из того места, где звезда находится прямо сейчас.
 			const current = starPosition(existing, now);
 			existing.fromX = current.x;
 			existing.fromY = current.y;
@@ -179,10 +152,7 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 
 	return {
 		stars,
-		// Порядок отрисовки: от дальних к ближним, а на одной глубине —
-		// от тусклых к ярким, чтобы хабы не оказались под чужими ореолами.
-		// Глубина у звезды постоянна, поэтому сортируем один раз здесь,
-		// а не в каждом кадре.
+		// Чтобы хабы не оказались под чужими ореолами.
 		order: [...stars.values()].sort((a, b) => a.depth - b.depth || a.radius - b.radius),
 		byRadius: [...stars.values()].sort((a, b) => b.radius - a.radius),
 		edges,
@@ -194,9 +164,6 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 	};
 }
 
-// Приглашения в физике не участвуют: их позиция считается здесь, вокруг
-// пригласившего, а угол берётся детерминированно из токена — чтобы точка
-// не прыгала между заходами (раздел 7.8).
 function placeInvites(
 	pending: PendingInvite[],
 	stars: Map<string, Star>,
@@ -238,7 +205,6 @@ function computeBounds(stars: Map<string, Star>, invites: InviteDot[]) {
 	}
 
 	if (!Number.isFinite(minX)) return { minX: -500, minY: -500, maxX: 500, maxY: 500 };
-	// Небо из одного человека тоже должно иметь размер.
 	if (maxX - minX < 200) {
 		const cx = (minX + maxX) / 2;
 		minX = cx - 100;
@@ -252,7 +218,6 @@ function computeBounds(stars: Map<string, Star>, invites: InviteDot[]) {
 	return { minX, minY, maxX, maxY };
 }
 
-// Положение звезды без дрейфа: результат интерполяции переезда.
 export function starPosition(star: Star, now: number): { x: number; y: number } {
 	const t = Math.min(1, (now - star.moveStart) / MOVE_MS);
 	if (t >= 1) return { x: star.toX, y: star.toY };

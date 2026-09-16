@@ -1,5 +1,3 @@
-// Сборка express-приложения. Отдельно от точки входа: так его можно поднять
-// в тестах, не запуская фоновые процессы и не занимая боевой порт.
 import express from 'express';
 import helmet from 'helmet';
 import { BASE_PATH } from '../../shared/config.js';
@@ -16,8 +14,7 @@ export function createApp(): express.Express {
 
 	app.use(
 		helmet({
-			// Mini App открывается внутри iframe Telegram, поэтому X-Frame-Options
-			// выключен намеренно: за рамки отвечает frame-ancestors в CSP.
+			// Внутри iframe Telegram: за рамки отвечает frame-ancestors, не X-Frame-Options.
 			frameguard: false,
 			crossOriginEmbedderPolicy: false,
 			crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -27,7 +24,6 @@ export function createApp(): express.Express {
 					defaultSrc: ["'self'"],
 					baseUri: ["'self'"],
 					objectSrc: ["'none'"],
-					// telegram-web-app.js подключается со стороны Telegram.
 					scriptSrc: ["'self'", 'https://telegram.org'],
 					styleSrc: ["'self'", "'unsafe-inline'"],
 					imgSrc: ["'self'", 'data:', 'blob:'],
@@ -40,19 +36,15 @@ export function createApp(): express.Express {
 		}),
 	);
 
-	// Тела запросов маленькие: самое крупное — initData и апдейт бота.
 	app.use(express.json({ limit: '256kb' }));
 
 	app.use(BASE_PATH, buildRouter());
 
-	// Всё, что выше префикса, нам не принадлежит: соседние приложения домена
-	// живут на своих путях, и отвечать за них мы не должны.
+	// Всё, что выше префикса, нам не принадлежит: там соседние приложения домена.
 	app.use((_req, res) => {
 		res.status(404).json({ error: { code: 'not_found', message: 'Не найдено' } });
 	});
 
-	// Единый обработчик ошибок: HttpError (включая BadRequest) превращается
-	// в свой статус, всё остальное — в 500 с записью в лог.
 	app.use(
 		(
 			err: unknown,

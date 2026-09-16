@@ -1,6 +1,4 @@
-// Единственная точка сборки URL. Захардкоженных «/api/...» в коде быть не должно:
-// приложение живёт под подпутём, и любой абсолютный путь мимо него попадёт
-// в соседнее приложение домена (раздел 2.2 ТЗ).
+// Единственная точка сборки URL: захардкоженный «/api/...» уведёт в соседнее приложение домена.
 import { BASE_PATH } from '../../../shared/config';
 
 export function apiUrl(path: string): string {
@@ -30,7 +28,6 @@ export class ApiError extends Error {
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
 	const res = await fetch(apiUrl(path), {
 		method,
-		// Сессия живёт в httpOnly-куке, без credentials её не пошлют.
 		credentials: 'include',
 		headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
 		body: body === undefined ? undefined : JSON.stringify(body),

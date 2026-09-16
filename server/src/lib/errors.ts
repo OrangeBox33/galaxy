@@ -1,5 +1,4 @@
-// Ошибки API. Единый формат тела ответа (раздел 10):
-// { "error": { "code": "...", "message": "...", "field": "..." } }
+// Единый формат тела ответа: { error: { code, message, field } }.
 export class HttpError extends Error {
 	constructor(
 		public status: number,
@@ -12,7 +11,6 @@ export class HttpError extends Error {
 	}
 }
 
-// 400 с указанием поля. Бросается валидаторами из validate.ts.
 export class BadRequest extends HttpError {
 	constructor(field: string, code: string, message: string) {
 		super(400, code, message, field);

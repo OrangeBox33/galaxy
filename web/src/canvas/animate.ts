@@ -1,4 +1,3 @@
-// Функции плавности (раздел 8.4).
 export function easeInOutCubic(t: number): number {
 	return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }
@@ -13,7 +12,6 @@ export function clamp01(value: number): number {
 	return value < 0 ? 0 : value > 1 ? 1 : value;
 }
 
-// Плавное приближение значения к цели, не зависящее от частоты кадров.
 export function approach(current: number, target: number, rate: number, dt: number): number {
 	return current + (target - current) * (1 - Math.exp(-rate * dt));
 }

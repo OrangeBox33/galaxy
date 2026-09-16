@@ -1,4 +1,3 @@
-// Экран карты: канвас на весь экран, карточка в углу и панель действий.
 import { useEffect, useRef, useState } from 'react';
 import { GRAPH_POLL_MS } from '../../../shared/config';
 import { useStore } from '../store';
@@ -6,6 +5,7 @@ import { EDGES_HIDDEN, createRenderer, type EdgeMode, type Renderer } from '../c
 import { StarCard } from '../components/StarCard';
 import { ProfileSheet } from '../components/ProfileSheet';
 import { InviteSheet } from '../components/InviteSheet';
+import { Suggestions } from '../components/Suggestions';
 import { haptic } from '../telegram/webapp';
 
 export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
@@ -21,12 +21,10 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 
 	const [showProfile, setShowProfile] = useState(false);
 	const [showInvite, setShowInvite] = useState(false);
-	// Выбор режима связей запоминаем: человек настроил под себя один раз.
 	const [edgeMode, setEdgeMode] = useState<EdgeMode>(
 		() => (localStorage.getItem('galaxy:edges') as EdgeMode | null) ?? 'glow',
 	);
 
-	// Первый вход: экран профиля поверх карты, но его можно пропустить.
 	useEffect(() => {
 		if (profile?.needsProfileSetup) setShowProfile(true);
 	}, [profile?.needsProfileSetup]);
@@ -40,6 +38,12 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 					return;
 				}
 				haptic('light');
+				// Выбор из хранилища, а не из замыкания: иначе сцена пересобиралась бы на каждый выбор.
+				const current = useStore.getState().selection;
+				if (current?.kind === pick.kind && current.id === pick.id) {
+					select(null);
+					return;
+				}
 				select({ kind: pick.kind, id: pick.id });
 			},
 			onHover: (id) => hover(id),
@@ -51,7 +55,6 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 		};
 	}, [select, hover]);
 
-	// Поллинг раз в 30 секунд плюс немедленный перезапрос после своих действий.
 	useEffect(() => {
 		void refreshGraph();
 		const timer = setInterval(() => void refreshGraph(), GRAPH_POLL_MS);
@@ -71,8 +74,6 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 		localStorage.setItem('galaxy:edges', edgeMode);
 	}, [edgeMode]);
 
-	// Аватарки прогреваем после первой отрисовки карты, порциями по 8:
-	// к первому наведению они уже в кеше браузера.
 	useEffect(() => {
 		if (!graph) return;
 		const files = graph.nodes.map((node) => node.avatar).filter((file): file is string => !!file);
@@ -101,9 +102,8 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 
 			<div className="sky__top">
 				<button className="chip" onClick={() => setShowInvite(true)}>
-					Позвать друга
+					Позвать друзей
 				</button>
-				{/* Пока связи скрыты, переключателю режима нечем управлять. */}
 				{!EDGES_HIDDEN && (
 					<button
 						className="chip"
@@ -134,6 +134,8 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 					−
 				</button>
 			</div>
+
+			<Suggestions starAt={(id) => rendererRef.current?.screenOf(id) ?? null} />
 
 			<StarCard
 				onEditProfile={() => setShowProfile(true)}

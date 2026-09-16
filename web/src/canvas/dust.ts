@@ -1,6 +1,4 @@
-// Декоративная звёздная пыль (раздел 8.1). Это фон, а не пользователи:
-// по ней нельзя кликнуть. Рисуется один раз в offscreen-канвас и дальше
-// просто копируется, двигаясь с параллаксом 0.25 от камеры.
+// Фон, а не пользователи: по пыли нельзя кликнуть.
 import { mulberry32 } from './prng';
 
 const COUNT = 600;
@@ -16,7 +14,6 @@ export function dustTile(): HTMLCanvasElement {
 	canvas.height = TILE;
 	const ctx = canvas.getContext('2d')!;
 
-	// Зерно фиксировано: пыль должна быть одна и та же при каждом заходе.
 	const random = mulberry32(0x5eed);
 	for (let i = 0; i < COUNT; i += 1) {
 		const x = random() * TILE;

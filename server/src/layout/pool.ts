@@ -1,6 +1,5 @@
-// Запуск расчёта в отдельном потоке. Поток создаётся на время расчёта
-// и гасится после: пересчёты редкие (несколько раз в сутки), держать
-// постоянный поток ради этого незачем, а память на сервере не резиновая.
+// Поток создаётся на время расчёта и гасится после: пересчёты редкие
+// (несколько раз в сутки), держать постоянный поток ради этого незачем.
 import { Worker } from 'node:worker_threads';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,8 +10,7 @@ import { toInput, toResponse, type WorkerRequest, type WorkerResponse } from './
 const here = dirname(fileURLToPath(import.meta.url));
 const WORKER_FILE = join(here, 'worker.js');
 
-// Расчёт не должен висеть вечно: если что-то пошло не так, лучше вернуть
-// ошибку и оставить прежнюю раскладку, чем копить мёртвые потоки.
+// Лучше ошибка и прежняя раскладка, чем копящиеся мёртвые потоки.
 const TIMEOUT_MS = 60_000;
 
 function toRequest(input: LayoutInput): WorkerRequest {
@@ -26,6 +24,7 @@ function toRequest(input: LayoutInput): WorkerRequest {
 		]),
 		full: input.full,
 		long: input.long,
+		previousScale: input.previousScale,
 	};
 }
 
@@ -33,6 +32,7 @@ function fromResponse(response: WorkerResponse): LayoutResult {
 	return {
 		nodes: response.nodes.map((node) => ({ ...node, id: BigInt(node.id) })),
 		iterations: response.iterations,
+		scale: response.scale,
 	};
 }
 
@@ -42,8 +42,7 @@ export function computeLayoutInThread(input: LayoutInput): Promise<LayoutResult>
 		try {
 			worker = new Worker(WORKER_FILE);
 		} catch (err) {
-			// Нет собранного воркера (например, запуск из исходников в тестах) —
-			// считаем на месте. Результат тот же, просто основной поток занят.
+			// Нет собранного воркера (запуск из исходников в тестах) — считаем на месте.
 			log.warn({ err }, 'поток раскладки недоступен, считаю в основном');
 			resolve(computeLayout(input));
 			return;

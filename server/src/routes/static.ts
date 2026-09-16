@@ -1,6 +1,5 @@
-// Раздача статики. Ассеты и аватарки кешируются навсегда (их имена содержат хеш),
-// index.html — никогда: иначе после деплоя у людей останется старый index,
-// ссылающийся на снесённые бандлы (раздел 2.3).
+// Ассеты и аватарки кешируются навсегда (в именах хеш), index.html — никогда:
+// иначе после деплоя останется старый index на снесённые бандлы.
 import express, { type Request, type Response, type Router } from 'express';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -11,14 +10,13 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-// Собранный клиент лежит в public/ рядом с деревом server/ внутри dist.
-// Путь можно переопределить переменной PUBLIC_DIR — удобно при локальной отладке.
+// Клиент — в public/ рядом с server/ внутри dist; PUBLIC_DIR переопределяет путь.
 export const PUBLIC_DIR = env.publicDir ? resolve(env.publicDir) : resolve(here, '../../../public');
 
 export const INDEX_HTML = join(PUBLIC_DIR, 'index.html');
 
 // Имя файла аватарки приходит из URL, поэтому проверяется регуляркой ДО обращения
-// к диску: без этого — дыра на обход каталога (раздел 9).
+// к диску: без этого — дыра на обход каталога.
 const AVATAR_NAME = /^-?\d+-[0-9a-f]{8}\.webp$/;
 
 export function mountAssets(router: Router): void {
@@ -32,8 +30,6 @@ export function mountAssets(router: Router): void {
 		}),
 	);
 
-	// Прочие файлы из корня клиента (иконки, manifest). Их немного, и они
-	// не хешированы, поэтому отдаём без длинного кеша.
 	router.use(
 		express.static(PUBLIC_DIR, {
 			index: false,
@@ -60,8 +56,7 @@ export function mountAvatars(router: Router): void {
 	});
 }
 
-// SPA-фолбэк: любой путь под /galaxy, не перехваченный выше, отдаёт index.html.
-// Благодаря этому перезагрузка страницы на /galaxy/admin открывает приложение, а не 404.
+// Перезагрузка страницы на /galaxy/admin должна открыть приложение, а не 404.
 export function spaFallback(_req: Request, res: Response): void {
 	if (!existsSync(INDEX_HTML)) {
 		res.status(503)

@@ -1,5 +1,3 @@
-// Вебхук Telegram. Секрет в пути сверяется через timingSafeEqual,
-// несовпадение → 404 без подробностей (раздел 10).
 import { Router } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { env } from '../env.js';
@@ -26,8 +24,7 @@ export function botRouter(): Router {
 			return;
 		}
 
-		// Telegram обязан получить 200 в любом случае, иначе начнёт ретраить
-		// апдейт по кругу. Поэтому отвечаем сразу, а обработку делаем следом.
+		// Telegram обязан получить 200, иначе начнёт ретраить апдейт по кругу.
 		res.status(200).end();
 
 		const update = req.body as {
@@ -35,7 +32,6 @@ export function botRouter(): Router {
 		};
 		const text = update?.message?.text ?? '';
 		const chatId = update?.message?.chat?.id;
-		// Обрабатываем только /start, остальное игнорируем.
 		if (!chatId || !text.startsWith('/start')) return;
 
 		void sendMessage(BigInt(chatId), GREETING, {

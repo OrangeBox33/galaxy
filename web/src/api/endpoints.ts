@@ -1,4 +1,3 @@
-// Типизированные вызовы API. Пути пишутся здесь один раз.
 import { api } from './client';
 import type { AdminLink, AdminUser, CreatedInvite, Graph, Profile } from './types';
 import type { Gender } from '../../../shared/config';
@@ -27,6 +26,10 @@ export const invites = {
 export const links = {
 	create: (targetId: string) => api.post<{ ok: true }>('/links', { targetId }),
 	remove: (targetId: string) => api.del<void>(`/links/${targetId}`),
+};
+
+export const suggestions = {
+	dismiss: (targetId: string) => api.post<void>('/suggestions/dismiss', { targetId }),
 };
 
 export const admin = {

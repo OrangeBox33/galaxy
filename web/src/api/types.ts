@@ -1,4 +1,3 @@
-// Типы ответов API. Все id — строки (раздел 3 ТЗ).
 import type { Gender } from '../../../shared/config';
 
 export type Profile = {
@@ -11,6 +10,9 @@ export type Profile = {
 	isTest: boolean;
 	nameLockedByAdmin: boolean;
 	needsProfileSetup: boolean;
+	// Одна на человека и не сгорает.
+	inviteUrl: string | null;
+	shareText: string;
 };
 
 export type GraphNode = {
@@ -19,7 +21,6 @@ export type GraphNode = {
 	gender: Gender;
 	age: number | null;
 	degree: number;
-	// Личный множитель числа языков пламени, 0.55…1 (раздел «Рендер»).
 	flame: number;
 	centrality: number;
 	x: number;
@@ -29,6 +30,7 @@ export type GraphNode = {
 	isBlocked: boolean;
 };
 
+// Одноразовые приглашения: сервер их отдаёт, но на карте они скрыты (INVITES_HIDDEN).
 export type PendingInvite = {
 	id: string;
 	token: string;
@@ -42,6 +44,8 @@ export type Graph = {
 	nodes: GraphNode[];
 	edges: [string, string][];
 	pending: PendingInvite[];
+	// Кому этот человек уже сказал «нет» в окне возможных друзей.
+	dismissed: string[];
 };
 
 export type CreatedInvite = {

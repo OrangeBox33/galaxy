@@ -1,5 +1,4 @@
-// Сборка роутера. Порядок маршрутов строго такой, как в разделе 2.3 ТЗ:
-// ассеты → аватарки → API → вебхук бота → SPA-фолбэк.
+// Порядок важен: spaFallback стоит последним и ловит всё неразобранное.
 import { Router } from 'express';
 import { mountAssets, mountAvatars, spaFallback } from './static.js';
 import { apiRouter } from './api.js';

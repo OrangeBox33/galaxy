@@ -1,5 +1,4 @@
-// Связи и приглашения через настоящий HTTP и настоящую БД (раздел 13).
-// База отдельная — galaxy_test, см. vitest.config.ts.
+// Настоящий HTTP и настоящая БД; база отдельная — galaxy_test, см. vitest.config.ts.
 import { createHmac } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
@@ -30,12 +29,12 @@ beforeEach(async () => {
 	await db.botOutbox.deleteMany();
 	await db.adminAudit.deleteMany();
 	await db.invite.deleteMany();
+	await db.suggestionDismissal.deleteMany();
 	await db.link.deleteMany();
 	await db.user.deleteMany();
 	await db.layoutState.deleteMany();
 });
 
-// Сессия выдаётся тем же способом, что и в бою, — подписанной кукой.
 function cookieFor(id: bigint): string {
 	const token = jwt.sign({ sub: id.toString() }, 'test-session-secret', {
 		algorithm: 'HS256',
@@ -77,7 +76,6 @@ function signInitData(fields: Record<string, string>): string {
 	return params.toString();
 }
 
-// Вход настоящим путём: подписанный initData, при желании с приглашением.
 async function login(id: number, startParam?: string) {
 	const initData = signInitData({
 		user: JSON.stringify({ id, first_name: 'Гость' }),
@@ -114,7 +112,6 @@ describe('связи', () => {
 		const other = await makeUser(200n, 'Ты');
 
 		await call('POST', '/api/links', { as: me, body: { targetId: '200' } });
-		// Вторая сторона пытается создать «встречную» связь.
 		const back = await call('POST', '/api/links', { as: other, body: { targetId: '100' } });
 
 		expect(back.status).toBe(409);
@@ -183,9 +180,7 @@ describe('приглашения', () => {
 		const created = await call('POST', '/api/invites', { as: inviter, body: {} });
 
 		await login(555, created.body.token);
-		// Тот же человек заходит ещё раз по той же ссылке.
 		await login(555, created.body.token);
-		// И совсем другой человек пробует ту же ссылку.
 		await login(777, created.body.token);
 
 		expect(await db.link.count()).toBe(1);
@@ -222,6 +217,130 @@ describe('приглашения', () => {
 
 		expect((await call('DELETE', `/api/invites/${created.body.id}`, { as: inviter })).status).toBe(204);
 		await login(555, created.body.token);
+
+		expect(await db.link.count()).toBe(0);
+	});
+});
+
+describe('постоянная ссылка', () => {
+	async function tokenOf(id: bigint): Promise<string> {
+		const user = await db.user.findUniqueOrThrow({ where: { id } });
+		return user.inviteToken!;
+	}
+
+	it('вход выдаёт постоянную ссылку и отдаёт её в профиле', async () => {
+		const res = await login(100);
+
+		expect(res.status).toBe(200);
+		const token = await tokenOf(100n);
+		expect(res.body.inviteUrl).toBe(`https://t.me/test_bot?startapp=${token}`);
+	});
+
+	it('токен короткий, строчный и без служебных знаков', async () => {
+		await login(100);
+
+		expect(await tokenOf(100n)).toMatch(/^[0-9a-z]{3}$/);
+	});
+
+	it('регистр в ссылке не важен', async () => {
+		await login(100);
+		const token = await tokenOf(100n);
+
+		await login(555, token.toUpperCase());
+
+		expect(await db.link.count()).toBe(1);
+	});
+
+	it('токены разных людей не совпадают', async () => {
+		await login(100);
+		await login(200);
+		await login(300);
+
+		const tokens = new Set([await tokenOf(100n), await tokenOf(200n), await tokenOf(300n)]);
+		expect(tokens.size).toBe(3);
+	});
+
+	it('старожил получает ссылку и через чтение профиля, без перевхода', async () => {
+		const old = await makeUser(100n, 'Старожил');
+
+		const res = await call('GET', '/api/me', { as: old });
+
+		expect(res.body.inviteUrl).toMatch(/^https:\/\/t\.me\/test_bot\?startapp=[0-9a-z]{3}$/);
+	});
+
+	it('ссылка не меняется от входа к входу', async () => {
+		await login(100);
+		const first = await tokenOf(100n);
+		await login(100);
+
+		expect(await tokenOf(100n)).toBe(first);
+	});
+
+	it('старожилу без токена он достаётся при первом же входе', async () => {
+		await makeUser(100n, 'Старожил');
+		expect((await db.user.findUniqueOrThrow({ where: { id: 100n } })).inviteToken).toBeNull();
+
+		const res = await login(100);
+
+		expect(res.body.inviteUrl).toContain('startapp=');
+	});
+
+	it('по одной ссылке связываются все, кто по ней пришёл', async () => {
+		await login(100);
+		const token = await tokenOf(100n);
+
+		await login(555, token);
+		await login(777, token);
+
+		const links = await db.link.findMany({ orderBy: { bId: 'asc' } });
+		expect(links).toHaveLength(2);
+		expect(links.map((link) => [link.aId, link.bId])).toEqual([
+			[100n, 555n],
+			[100n, 777n],
+		]);
+		expect((await db.user.findUniqueOrThrow({ where: { id: 100n } })).degree).toBe(2);
+	});
+
+	it('повторный приход по той же ссылке дубля не делает', async () => {
+		await login(100);
+		const token = await tokenOf(100n);
+
+		await login(555, token);
+		await login(555, token);
+
+		expect(await db.link.count()).toBe(1);
+		expect((await db.user.findUniqueOrThrow({ where: { id: 555n } })).degree).toBe(1);
+	});
+
+	it('своя собственная ссылка петли не создаёт', async () => {
+		await login(100);
+		const token = await tokenOf(100n);
+
+		await login(100, token);
+
+		expect(await db.link.count()).toBe(0);
+	});
+
+	it('хозяину ссылки уходит уведомление о госте', async () => {
+		await login(100);
+		const token = await tokenOf(100n);
+		await db.botOutbox.deleteMany();
+
+		await login(555, token);
+
+		const outbox = await db.botOutbox.findMany();
+		expect(outbox).toHaveLength(1);
+		expect(outbox[0].userId).toBe(100n);
+		expect(outbox[0].kind).toBe('invite_accepted');
+		expect(outbox[0].text).toContain('Гость');
+	});
+
+	it('ссылка заблокированного не связывает', async () => {
+		await login(100);
+		const token = await tokenOf(100n);
+		await db.user.update({ where: { id: 100n }, data: { isBlocked: true } });
+
+		await login(555, token);
 
 		expect(await db.link.count()).toBe(0);
 	});

@@ -1,9 +1,4 @@
-// Панель ползунков для песочницы. Живёт только в dev: в сборку не попадает,
-// потому что её тянет sandbox.ts, а vite собирает только index.html.
-//
-// Панель правит объект tuning из рендерера прямо на месте — рендерер читает
-// его каждый кадр, поэтому эффект виден сразу, без пересборки и перезагрузки.
-// Подобранное лежит в localStorage и переживает обновление страницы.
+// Отладочная панель ползунков: в сборку не попадает (её тянет sandbox.ts).
 import { tuning } from './canvas/renderer';
 
 type Field = { key: string; label: string; min: number; max: number; step: number };
@@ -16,7 +11,6 @@ const range = (key: string, label: string, min: number, max: number, step: numbe
 	step,
 });
 
-// Ползунки языков пламени.
 const FLAME_FIELDS: Field[] = [
 	range('tongues', 'сколько языков (множитель)', 0.55, 1, 0.05),
 	range('from', 'начало от центра', 0, 2, 0.01),
@@ -172,7 +166,6 @@ function row(field: Field, bag: Bag): HTMLElement {
 	return line;
 }
 
-// Снимок всех значений — его же кладём в localStorage и отдаём по кнопке.
 function snapshot(): Bag {
 	const { flame, ...rest } = tuning;
 	return { flame: { ...flame }, ...rest };
@@ -186,8 +179,6 @@ function save(): void {
 	}, 200);
 }
 
-// Возвращаем подобранное после перезагрузки. Ключи, которых в сохранённом нет
-// (например, добавленные позже), остаются со значениями по умолчанию.
 function restore(): void {
 	const raw = localStorage.getItem(STORAGE_KEY);
 	if (!raw) return;

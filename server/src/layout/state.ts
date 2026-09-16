@@ -1,14 +1,10 @@
-// Флаг «граф изменился». Любое изменение графа помечает раскладку грязной,
-// а таймер (раздел 7.8) через LAYOUT_RECOMPUTE_DEBOUNCE_MS после последнего
-// изменения запускает инкрементальный пересчёт.
+// Таймер пересчитывает раскладку через LAYOUT_RECOMPUTE_DEBOUNCE_MS
+// тишины: иначе десяток связей, созданных подряд в админке, дал бы десяток пересчётов.
 import type { Prisma } from '@prisma/client';
 import { db } from '../db.js';
 
 type Db = Prisma.TransactionClient | typeof db;
 
-// Момент последнего изменения графа. Пересчёт запускается не сразу, а через
-// LAYOUT_RECOMPUTE_DEBOUNCE_MS после него: иначе десяток связей, созданных
-// подряд в админке, дал бы десяток пересчётов.
 let lastChangeAt = 0;
 
 export function noteGraphChanged(): void {

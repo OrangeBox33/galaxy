@@ -1,6 +1,5 @@
-// Загрузка аватарок из Telegram (раздел 9). Очередь в памяти процесса
-// с параллелизмом 2: аватарка не должна задерживать ответ на вход, а сотня
-// одновременных скачиваний не должна забивать канал.
+// Загрузка аватарок из Telegram. Очередь в памяти, параллелизм 2:
+// аватарка не должна задерживать вход, а сотня скачиваний — забивать канал.
 import { createHash } from 'node:crypto';
 import { unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -33,8 +32,6 @@ function pump(): void {
 		running += 1;
 		void process(task)
 			.catch((err) => {
-				// Ошибка любого шага — залогировать и оставить avatarFile как есть.
-				// Не ретраим в цикле: у Telegram свои причины не отдавать фото.
 				log.warn({ err, userId: task.userId.toString() }, 'аватарка не загружена');
 			})
 			.finally(() => {
@@ -77,8 +74,7 @@ async function process(task: Task): Promise<void> {
 		data: { avatarFile: file, avatarFetchedAt: new Date() },
 	});
 
-	// Имя файла содержит хеш содержимого, поэтому старый файл больше не нужен
-	// и никем не кешируется по этому адресу.
+	// В имени файла хеш содержимого, поэтому старый никем не кешируется.
 	if (previous?.avatarFile && previous.avatarFile !== file) {
 		await unlink(join(env.avatarDir, previous.avatarFile)).catch(() => undefined);
 	}

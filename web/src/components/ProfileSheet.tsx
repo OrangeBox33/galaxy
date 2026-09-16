@@ -1,5 +1,3 @@
-// Экран профиля поверх карты. При первом входе показывается сам, но его
-// всегда можно пропустить — тогда звезда светится нейтрально-белым.
 import { useState } from 'react';
 import { AGE_MAX, AGE_MIN, type Gender } from '../../../shared/config';
 import { me as meApi } from '../api/endpoints';
@@ -32,8 +30,6 @@ export function ProfileSheet({ onClose }: { onClose: () => void }) {
 		setError(null);
 		try {
 			const updated = await meApi.update({
-				// Заблокированное админом имя не отправляем вовсе: сервер всё
-				// равно ответит 403, а пользователю это ни о чём не скажет.
 				...(profile!.nameLockedByAdmin ? {} : { displayName: name.trim() }),
 				age: age.trim() === '' ? null : Number(age),
 				gender,

@@ -1,10 +1,10 @@
-// Свой профиль (раздел 5).
 import { Router } from 'express';
 import { AGE_MAX, AGE_MIN, GENDERS } from '../../../shared/config.js';
 import { db } from '../db.js';
 import { forbidden } from '../lib/errors.js';
 import { cleanName } from '../lib/names.js';
 import { rateLimit } from '../lib/rateLimit.js';
+import { ensureInviteToken } from '../lib/inviteLink.js';
 import { toProfile } from '../lib/views.js';
 import { has, int, oneOf, optional, str, body as reqBody } from '../lib/validate.js';
 import { clearSession } from '../auth/session.js';
@@ -18,7 +18,8 @@ export function meRouter(): Router {
 	router.get('/', async (req, res, next) => {
 		try {
 			const user = await db.user.findUniqueOrThrow({ where: { id: req.userId! } });
-			res.json(toProfile(user));
+			// Старожилам ссылка достаётся здесь же, без переоткрытия сессии.
+			res.json(toProfile(await ensureInviteToken(db, user)));
 		} catch (err) {
 			next(err);
 		}
@@ -37,7 +38,6 @@ export function meRouter(): Router {
 			} = {};
 
 			if (has(parsed, 'displayName')) {
-				// Переименованный админом не может вернуть себе прежнее имя.
 				if (current.nameLockedByAdmin) {
 					throw forbidden('Имя изменено администратором');
 				}
@@ -61,7 +61,7 @@ export function meRouter(): Router {
 
 	router.delete('/', async (req, res, next) => {
 		try {
-			// Связи и приглашения уходят каскадом за пользователем (раздел 3).
+			// Связи и приглашения уходят каскадом за пользователем.
 			await db.user.delete({ where: { id: req.userId! } });
 			await markLayoutDirty();
 			clearSession(res);

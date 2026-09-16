@@ -1,6 +1,5 @@
-// Весь граф одним запросом (раздел 10). Единственный тяжёлый эндпоинт;
-// клиент кеширует ответ и перезапрашивает раз в 30 секунд, плюс немедленно
-// после любого своего действия. WebSocket и SSE намеренно не используются.
+// Весь граф одним запросом. Клиент перезапрашивает раз в 30 секунд
+// и сразу после своего действия; WebSocket и SSE намеренно не используются.
 import { Router } from 'express';
 import { db } from '../db.js';
 import { displayName } from '../lib/names.js';
@@ -15,13 +14,19 @@ export function graphRouter(): Router {
 		try {
 			const userId = req.userId!;
 
-			const [users, links, pending, layoutVersion] = await Promise.all([
+			const [users, links, pending, dismissed, layoutVersion] = await Promise.all([
 				db.user.findMany({ orderBy: { id: 'asc' } }),
 				db.link.findMany({ select: { aId: true, bId: true } }),
 				// Чужие тусклые точки не отдаются никогда, даже админу.
 				db.invite.findMany({
 					where: { inviterId: userId, status: 'PENDING' },
 					orderBy: { createdAt: 'asc' },
+				}),
+				// Кого этот человек отклонил в окне возможных друзей: клиент
+				// вычитает этот список из подсказок сам.
+				db.suggestionDismissal.findMany({
+					where: { userId },
+					select: { targetId: true },
 				}),
 				getLayoutVersion(),
 			]);
@@ -44,6 +49,7 @@ export function graphRouter(): Router {
 					isBlocked: user.isBlocked,
 				})),
 				edges: links.map((link) => [link.aId.toString(), link.bId.toString()]),
+				dismissed: dismissed.map((row) => row.targetId.toString()),
 				pending: pending.map((invite) => ({
 					id: invite.id,
 					token: invite.token,

@@ -1,5 +1,4 @@
-// Ограничение частоты по id пользователя. Окно 1 минута, счётчики в памяти
-// процесса — его всё равно ровно один (раздел 14).
+// Окно 1 минута, счётчики в памяти процесса — он всё равно ровно один.
 import type { NextFunction, Request, Response } from 'express';
 import { tooMany } from './errors.js';
 import { readSession } from '../auth/session.js';
@@ -19,7 +18,6 @@ setInterval(() => {
 
 export function rateLimit(name: string, limit: number) {
 	return (req: Request, _res: Response, next: NextFunction): void => {
-		// Считаем по пользователю; для запросов до входа (сам вход) — по адресу.
 		const who = (req.userId ?? readSession(req))?.toString() ?? req.ip ?? 'unknown';
 		const key = `${name}:${who}`;
 		const now = Date.now();
@@ -39,8 +37,7 @@ export function rateLimit(name: string, limit: number) {
 	};
 }
 
-// Общий предел на все изменяющие запросы (раздел 14): 60 в минуту.
-// Отдельные маршруты сверх этого ограничены строже.
+// Общий предел на все изменяющие запросы; отдельные маршруты строже.
 export function mutationRateLimit() {
 	const limiter = rateLimit('mutate', 60);
 	return (req: Request, res: Response, next: NextFunction): void => {

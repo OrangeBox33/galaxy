@@ -290,6 +290,7 @@ button {
 }
 
 .sheet__hint,
+.sheet__note,
 .field small {
 	color: var(--text-dim);
 	font-size: 12.5px;
@@ -520,4 +521,181 @@ button {
 	background: none;
 	color: var(--text-dim);
 	cursor: pointer;
+}
+
+/* ── Возможные друзья ──────────────────────────────────────────────────
+   Стопка карточек в правом верхнем углу. Слот отвечает за место в стопке
+   (и плавно подтягивает нижние вверх, когда ушла верхняя), содержимое —
+   за прилёт и уход. Шаг стопки 72px = высота карточки плюс зазор; то же
+   число лежит в Suggestions.tsx, разъезжаться им нельзя.
+
+   Ширина держится в обещанных 40% экрана, поэтому отступы внутри тесные:
+   иначе «Связать» и «Нет» не помещаются в строку и правый край обрезается. */
+.suggest {
+	position: absolute;
+	top: max(12px, env(safe-area-inset-top));
+	right: 8px;
+	width: min(40vw, 230px);
+	min-width: 150px;
+	/* Карточки ловят нажатия сами; всё, что между ними, остаётся небом. */
+	pointer-events: none;
+}
+
+.suggest__slot {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	transition: transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+	pointer-events: auto;
+}
+
+.suggest__slot--leaving {
+	pointer-events: none;
+}
+
+.suggest__item {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 64px;
+	padding: 0 7px;
+	box-sizing: border-box;
+	border: 1px solid var(--panel-edge);
+	border-radius: 13px;
+	background: var(--panel);
+	backdrop-filter: blur(12px);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	overflow: hidden;
+	animation: suggest-in 450ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.suggest__body {
+	min-width: 0;
+	flex: 1;
+}
+
+.suggest__name {
+	font-size: 13px;
+	font-weight: 500;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.suggest__actions {
+	display: flex;
+	gap: 5px;
+	margin-top: 4px;
+}
+
+.suggest__btn {
+	border: 1px solid transparent;
+	border-radius: 8px;
+	padding: 4px 6px;
+	font-size: 11px;
+	line-height: 1.1;
+	white-space: nowrap;
+	background: rgba(200, 216, 255, 0.16);
+	color: inherit;
+	font-family: inherit;
+	cursor: pointer;
+}
+
+.suggest__btn:hover {
+	background: rgba(200, 216, 255, 0.24);
+}
+
+.suggest__btn--ghost {
+	background: none;
+	border-color: var(--panel-edge);
+	color: var(--text-dim);
+}
+
+/* Прилёт снизу — проявление из темноты: альфа с нуля, ничего не вспыхивает. */
+@keyframes suggest-in {
+	from {
+		opacity: 0;
+		transform: translateY(26px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* «Нет»: карточка просто гаснет. */
+.suggest__item--fade {
+	animation: suggest-fade 340ms ease forwards;
+}
+
+@keyframes suggest-fade {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+/* «Связать»: карточка делает вдох, белеет и схлопывается в точку у нажатой
+   кнопки. Круга-вспышки больше нет — он накрывал карточку за 80 мс и читался
+   как мгновенная заливка, а не как взрыв. Точка продолжает жить искрой
+   (.suggest__seed) и улетает к звезде человека на карте. */
+.suggest__item--burst {
+	transform-origin: var(--fx, 50%) var(--fy, 50%);
+	animation: suggest-collapse 360ms cubic-bezier(0.3, 0.9, 0.6, 1) forwards;
+}
+
+@keyframes suggest-collapse {
+	0% {
+		opacity: 1;
+	}
+	14% {
+		transform: scale(1.035);
+	}
+	30% {
+		background: rgba(255, 255, 255, 0.92);
+		border-color: #ffffff;
+	}
+	66% {
+		transform: scale(0.04);
+		opacity: 1;
+	}
+	100% {
+		transform: scale(0.04);
+		opacity: 0;
+	}
+}
+
+/* Искра живёт в body: у карточки overflow: hidden, а лететь ей через полэкрана.
+   Движение задаётся из Suggestions.tsx — цель известна только в рантайме. */
+.suggest__seed {
+	position: fixed;
+	z-index: 20;
+	width: 11px;
+	height: 11px;
+	margin: -5.5px 0 0 -5.5px;
+	border-radius: 50%;
+	background: #ffffff;
+	box-shadow:
+		0 0 16px 5px rgba(214, 232, 255, 0.95),
+		0 0 40px 12px rgba(140, 180, 255, 0.35);
+	pointer-events: none;
+}
+
+/* Движение выключено — карточки появляются и исчезают мгновенно. */
+@media (prefers-reduced-motion: reduce) {
+	.suggest__slot {
+		transition: none;
+	}
+	.suggest__slot--leaving {
+		display: none;
+	}
+	.suggest__item,
+	.suggest__item--fade,
+	.suggest__item--burst {
+		animation: none;
+	}
 }

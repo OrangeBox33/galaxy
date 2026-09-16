@@ -1,5 +1,3 @@
-// Карточка выбранной звезды — в углу экрана (раздел 8.7). На десктопе
-// фиксированная слева внизу, на мобильных — нижняя панель во всю ширину.
 import { useState } from 'react';
 import { useStore } from '../store';
 import { invites } from '../api/endpoints';
@@ -29,8 +27,6 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 		select(null);
 	};
 
-	// Связать и развязать идут через хранилище: оно показывает изменение
-	// сразу, не дожидаясь, пока сервер пересчитает карту.
 	async function run(action: () => Promise<unknown>, refresh = true): Promise<void> {
 		setBusy(true);
 		setError(null);

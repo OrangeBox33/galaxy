@@ -1,11 +1,10 @@
-// Вход через Telegram Mini App (раздел 4). Никаких паролей и форм:
-// приложение открывается внутри Telegram и получает подписанный initData.
 import { Router } from 'express';
 import { randomFlame } from '../lib/flame.js';
 import { db } from '../db.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { str, body as reqBody } from '../lib/validate.js';
 import { sanitizeIncoming } from '../lib/names.js';
+import { ensureInviteToken } from '../lib/inviteLink.js';
 import { toProfile } from '../lib/views.js';
 import { verifyInitData } from '../auth/initData.js';
 import { clearSession, issueSession } from '../auth/session.js';
@@ -13,8 +12,7 @@ import { acceptInvite } from './invites.js';
 import { markLayoutDirty } from '../layout/state.js';
 import { scheduleAvatarFetch } from '../avatars/queue.js';
 
-// Аватарку обновляем не чаще раза в неделю: она меняется редко, а каждый вход
-// иначе тянул бы файл с серверов Telegram.
+// Аватарка меняется редко: обновляем не чаще раза в неделю.
 const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function authRouter(): Router {
@@ -55,6 +53,7 @@ export function authRouter(): Router {
 
 				if (saved.isBlocked) return saved;
 
+				await ensureInviteToken(tx, saved);
 				if (isNew) await markLayoutDirty(tx);
 				if (data.startParam) await acceptInvite(tx, saved.id, data.startParam);
 

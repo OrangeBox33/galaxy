@@ -1,5 +1,3 @@
-// Админка (раздел 11). Одна таблица: поиск, сортировка, правка прямо в ячейке.
-// Пагинации нет намеренно — двести строк браузер рисует мгновенно.
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { GENDERS, type Gender } from '../../../shared/config';
 import { admin } from '../api/endpoints';
@@ -77,7 +75,6 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 		setSort((current) => ({ key, desc: current.key === key ? !current.desc : true }));
 	}
 
-	// Правка в ячейке: показываем новое значение сразу, при ошибке откатываем.
 	async function patch(
 		id: string,
 		change: { displayName?: string; age?: number | null; gender?: Gender; isBlocked?: boolean },
@@ -380,7 +377,6 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 							{deleting?.id === user.id && (
 								<tr className="admin__sub">
 									<td colSpan={11}>
-										{/* Подтверждение в два шага: имя нужно ввести руками. */}
 										<span>
 											Удалить «{user.name}» со всеми связями? Введите имя для подтверждения:
 										</span>

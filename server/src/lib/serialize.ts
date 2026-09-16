@@ -1,5 +1,4 @@
-// BigInt не сериализуется в JSON, а все наши id — BigInt. Поэтому один хелпер,
-// который применяется ко всем ответам API (раздел 3).
+// BigInt не сериализуется в JSON, а все наши id — BigInt.
 export function jsonSafe<T>(value: T): unknown {
 	if (typeof value === 'bigint') return value.toString();
 	if (value instanceof Date) return value.toISOString();

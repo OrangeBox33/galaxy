@@ -1,4 +1,3 @@
-// Точка входа сервера. Слушает PORT, монтирует весь роутер под BASE_PATH.
 import { mkdirSync } from 'node:fs';
 import { BASE_PATH } from '../../shared/config.js';
 import { env } from './env.js';
@@ -13,8 +12,7 @@ mkdirSync(env.avatarDir, { recursive: true });
 
 const server = createApp().listen(env.port, () => {
 	log.info(`Galaxy слушает порт ${env.port}, базовый путь ${BASE_PATH}`);
-	// Оба фоновых процесса держат состояние в памяти, поэтому инстанс
-	// обязан быть ровно один (см. ecosystem.config.cjs).
+	// Оба держат состояние в памяти: инстанс pm2 обязан быть ровно один.
 	startLayoutScheduler();
 	startOutboxWorker();
 });

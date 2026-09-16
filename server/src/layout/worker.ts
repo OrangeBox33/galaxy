@@ -1,12 +1,8 @@
-// Раскладка в отдельном потоке. Сам расчёт — чистая математика без ввода-вывода,
-// поэтому выносится целиком: пока поток считает свои секунду-две, основной
-// продолжает отвечать на запросы. Иначе при двух сотнях звёзд каждое изменение
-// графа подвешивало бы весь сервис.
+// Пока поток считает секунду-две, основной отвечает на запросы.
 import { parentPort } from 'node:worker_threads';
 import { computeLayout, type LayoutInput, type LayoutResult } from '../../../shared/layout/index.js';
 
-// Через границу потока BigInt не проходит структурированным клонированием
-// молча — id ходят строками, как и во всём остальном API.
+// Через границу потока BigInt не проходит — id ходят строками.
 export type WorkerRequest = {
 	ids: string[];
 	edges: [number, number][];
@@ -14,11 +10,21 @@ export type WorkerRequest = {
 	anchors: [string, string][];
 	full?: boolean;
 	long?: boolean;
+	previousScale?: number;
 };
 
 export type WorkerResponse = {
-	nodes: { id: string; x: number; y: number; degree: number; centrality: number }[];
+	nodes: {
+		id: string;
+		x: number;
+		y: number;
+		degree: number;
+		centrality: number;
+		cluster: number;
+		component: number;
+	}[];
 	iterations: number;
+	scale: number;
 };
 
 export function toInput(request: WorkerRequest): LayoutInput {
@@ -29,6 +35,7 @@ export function toInput(request: WorkerRequest): LayoutInput {
 		anchors: new Map(request.anchors.map(([id, anchor]) => [BigInt(id), BigInt(anchor)])),
 		full: request.full,
 		long: request.long,
+		previousScale: request.previousScale,
 	};
 }
 
@@ -36,6 +43,7 @@ export function toResponse(result: LayoutResult): WorkerResponse {
 	return {
 		nodes: result.nodes.map((node) => ({ ...node, id: node.id.toString() })),
 		iterations: result.iterations,
+		scale: result.scale,
 	};
 }
 

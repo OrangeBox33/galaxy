@@ -1,4 +1,3 @@
-// Проверка initData Telegram Mini App. Раздел 4.1 ТЗ — реализовано ровно по шагам.
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { env } from '../env.js';
 
@@ -19,8 +18,7 @@ export type InitData = {
 
 const MAX_AGE_SEC = 24 * 60 * 60;
 
-// Ключ — именно строка "WebAppData", сообщение — токен бота. Не наоборот:
-// перепутанный порядок аргументов здесь самая частая ошибка.
+// Ключ — строка "WebAppData", сообщение — токен бота, не наоборот.
 const SECRET_KEY = createHmac('sha256', 'WebAppData').update(env.botToken).digest();
 
 export function verifyInitData(raw: string, now = Date.now()): InitData | null {
@@ -31,7 +29,6 @@ export function verifyInitData(raw: string, now = Date.now()): InitData | null {
 	if (!hash) return null;
 	params.delete('hash');
 
-	// Оставшиеся пары сортируем по ключу и склеиваем через \n в виде key=value.
 	const pairs: string[] = [];
 	for (const [key, value] of params.entries()) {
 		pairs.push(`${key}=${value}`);

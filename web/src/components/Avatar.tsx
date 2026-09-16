@@ -1,5 +1,3 @@
-// Аватарка или кружок с первой буквой имени в цвете пола — Telegram отдаёт
-// фото не всегда, и отсутствие аватарки не должно ломать экран (раздел 9).
 import { assetUrl } from '../api/client';
 import type { Gender } from '../../../shared/config';
 

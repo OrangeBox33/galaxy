@@ -1,5 +1,3 @@
-// Воркер исходящих сообщений (раздел 12). Отправка идёт только отсюда:
-// полезное действие не должно падать из-за того, что человек заблокировал бота.
 import { db } from '../db.js';
 import { log } from '../lib/log.js';
 import { sendMessage, type TelegramError } from './api.js';
@@ -8,8 +6,7 @@ const TICK_MS = 5000;
 const BATCH = 20;
 const MAX_ATTEMPTS = 3;
 
-// Пауза между попытками растёт экспоненциально. Держим её в памяти процесса:
-// он один, а после перезапуска повторить сразу — не беда.
+// Пауза между попытками растёт экспоненциально; в памяти — процесс всё равно один.
 const nextAttemptAt = new Map<string, number>();
 
 export function startOutboxWorker(): void {

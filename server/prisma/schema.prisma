@@ -51,6 +51,12 @@ model User {
   isTest    Boolean @default(false)
   isBlocked Boolean @default(false) // не пускаем в приложение, звезда гаснет
 
+  // Постоянная личная ссылка-приглашение: одна на человека, навсегда.
+  // Каждый, кто по ней придёт, сразу получает связь с хозяином ссылки —
+  // в отличие от одноразовых Invite, которые сгорали на первом же госте.
+  // Nullable только ради старых строк: заполняется при первом же входе.
+  inviteToken String? @unique
+
   // Кэш раскладки: координаты считает сервер (раздел 7), клиент их только анимирует.
   x          Float @default(0)
   y          Float @default(0)
@@ -64,6 +70,9 @@ model User {
   linksB          Link[]   @relation("LinkB")
   invitesSent     Invite[] @relation("Inviter")
   invitesAccepted Invite[] @relation("Acceptor")
+
+  dismissalsMade SuggestionDismissal[] @relation("DismissalOwner")
+  dismissedBy    SuggestionDismissal[] @relation("DismissalTarget")
 
   @@index([isTest])
 }
@@ -81,6 +90,20 @@ model Link {
   @@unique([aId, bId])
   @@index([aId])
   @@index([bId])
+}
+
+// «Нет» в окне возможных друзей. Строка живёт вечно: отказ переживает
+// перезаход, смену телефона и переустановку приложения. Направление одно —
+// скрыто только у того, кто нажал; второй по-прежнему видит первого.
+model SuggestionDismissal {
+  userId    BigInt
+  targetId  BigInt
+  user      User     @relation("DismissalOwner", fields: [userId], references: [id], onDelete: Cascade)
+  target    User     @relation("DismissalTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, targetId])
+  @@index([userId])
 }
 
 // Приглашение = «тусклая точка». Видна ТОЛЬКО пригласившему.

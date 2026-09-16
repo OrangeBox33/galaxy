@@ -1,4 +1,4 @@
-// Разовая настройка Telegram (раздел 15.5). Запускается локально с прод-значениями:
+// Разовая настройка Telegram. Запускается локально с прод-значениями:
 //   npm run setup:bot
 import { env } from '../env.js';
 import { getWebhookInfo, setWebhook } from './api.js';
