@@ -1,10 +1,20 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { mutualFriends, neighbourMap, shortestPath } from '../../../shared/path';
 import { playLink } from '../sound';
 import { useStore } from '../store';
 import { invites } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Avatar } from './Avatar';
 import { openShare } from '../telegram/webapp';
+
+function handshakes(steps: number): string {
+	const tens = steps % 100;
+	const ones = steps % 10;
+	if (tens >= 11 && tens <= 14) return 'рукопожатий';
+	if (ones === 1) return 'рукопожатие';
+	if (ones >= 2 && ones <= 4) return 'рукопожатия';
+	return 'рукопожатий';
+}
 
 type Props = {
 	onEditProfile: () => void;
@@ -20,6 +30,7 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 	const unlinkFrom = useStore((state) => state.unlinkFrom);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const neighbours = useMemo(() => neighbourMap(graph?.edges ?? []), [graph?.edges]);
 
 	if (!graph || !selection) return null;
 
@@ -90,6 +101,8 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 	const linked = graph.edges.some(
 		([a, b]) => (a === graph.me && b === node.id) || (b === graph.me && a === node.id),
 	);
+	const chain = isMe ? null : shortestPath(neighbours, graph.me, node.id);
+	const mutual = isMe ? 0 : mutualFriends(neighbours, graph.me, node.id);
 
 	return (
 		<div className="card">
@@ -108,6 +121,14 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 						{node.isTest && <span className="card__badge">тестовая</span>}
 						{node.isBlocked && <span className="card__badge">погасла</span>}
 					</div>
+					{!isMe && (
+						<div className="card__meta">
+							{chain
+								? `${chain.length - 1} ${handshakes(chain.length - 1)}`
+								: 'пока не связаны'}
+							{mutual > 0 && <span> · общих друзей: {mutual}</span>}
+						</div>
+					)}
 				</div>
 			</div>
 

@@ -16,6 +16,7 @@ import {
 	type Star,
 } from './scene';
 import { stepWobble, type Grab } from './wobble';
+import { shortestPath } from '../../../shared/path';
 
 export type Pick =
 	| { kind: 'node'; id: string }
@@ -54,6 +55,9 @@ const EDGE_GLOW_RADII = 2.5;
 const EDGE_ALPHA_NEAR = 0.34;
 const EDGE_ALPHA_FAR = 0.015;
 const EDGE_ALPHA_PLAIN = 0.22;
+
+const EDGE_WIDTH = 0.8;
+const EDGE_WIDTH_CHAIN = 1.4;
 
 const CORONA_TONGUES_AT = [
 	{ radius: 4.0, tongues: 12 }, // звезда с одной связью
@@ -148,6 +152,16 @@ export const tuning = {
 		softFrom: 0.49,
 	} as Flame,
 
+	// Связи выбранной звезды — фон для цепочки от меня до неё, а не главное
+	// на экране: одинаковой яркостью цепочка в них тонула.
+	edge: {
+		chain: 0.55, // яркость цепочки
+		selected: 0.18, // яркость прочих связей выбранной звезды
+		// Докуда по связи доходит цвет звезды; дальше до середины она белеет.
+		// Две краски, встречаясь посередине, мешаются в грязь.
+		reach: 0.4,
+	},
+
 	coreSize: 0.53, // радиус диска в долях радиуса звезды
 	coreTint: 0.35, // насколько центр уходит в цвет звезды
 	coreSharp: 0.6, // докуда центр держит свой цвет, в долях кромки
@@ -189,6 +203,8 @@ export function createRenderer(
 
 	let edgeMode: EdgeMode = 'glow';
 	let selectedId: string | null = null;
+	let chainNodes = new Set<string>();
+	let chainEdges = new Set<string>();
 	let hoveredId: string | null = null;
 	let highlight = 0;
 
@@ -199,8 +215,8 @@ export function createRenderer(
 	let grab: Grab = null;
 	let wobbling = false;
 
-	const showAllEdges = options.showEdges === true;
-	const edgesHidden = EDGES_HIDDEN && !showAllEdges;
+	let showAllEdges = options.showEdges === true;
+	const edgesHidden = (): boolean => EDGES_HIDDEN && !showAllEdges;
 
 	function resize(): void {
 		const rect = canvas.getBoundingClientRect();
@@ -221,6 +237,7 @@ export function createRenderer(
 	function setGraph(graph: Graph): void {
 		scene = syncScene(scene, graph, performance.now());
 		camera.updateLimits(scene.bounds);
+		findChain();
 		if (firstFit && scene.stars.size > 0) {
 			firstFit = false;
 			camera.fit(scene.bounds);
@@ -231,10 +248,31 @@ export function createRenderer(
 
 	function setSelection(id: string | null): void {
 		selectedId = id;
+		findChain();
+	}
+
+	function edgeKey(a: string, b: string): string {
+		return a < b ? `${a}|${b}` : `${b}|${a}`;
+	}
+
+	// Не в кадре, а на выбор и на приход графа: путь меняется только вместе с ними.
+	function findChain(): void {
+		chainNodes = new Set();
+		chainEdges = new Set();
+		if (selectedId === null || selectedId === scene.me) return;
+
+		const chain = shortestPath(scene.neighbours, scene.me, selectedId);
+		if (!chain) return;
+		for (const id of chain) chainNodes.add(id);
+		for (let i = 1; i < chain.length; i += 1) chainEdges.add(edgeKey(chain[i - 1], chain[i]));
 	}
 
 	function setEdgeMode(mode: EdgeMode): void {
 		edgeMode = mode;
+	}
+
+	function setShowEdges(value: boolean): void {
+		showAllEdges = value;
 	}
 
 	function focusOn(id: string, zoom?: number): void {
@@ -367,7 +405,10 @@ export function createRenderer(
 
 		const neighbours = selectedId ? scene.neighbours.get(selectedId) : undefined;
 		const isLit = (id: string): boolean =>
-			!selectedId || id === selectedId || (neighbours?.has(id) ?? false);
+			!selectedId ||
+			id === selectedId ||
+			(neighbours?.has(id) ?? false) ||
+			chainNodes.has(id);
 
 		drawEdges(now, isLit);
 		drawInvites(now);
@@ -455,6 +496,26 @@ export function createRenderer(
 		return ((hash >>> 0) % 10000) / 10000;
 	}
 
+	// Каждый красит свою половину и отпускает: к середине оба цвета уже белые.
+	function linkGradient(
+		x1: number,
+		y1: number,
+		x2: number,
+		y2: number,
+		a: Star,
+		b: Star,
+		alpha: number,
+	): CanvasGradient {
+		const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+		const reach = Math.min(0.5, tuning.edge.reach);
+		gradient.addColorStop(0, rgba(a.halo, alpha));
+		gradient.addColorStop(reach, rgba(a.halo, alpha));
+		gradient.addColorStop(0.5, rgba(CORE_RGB, alpha));
+		gradient.addColorStop(1 - reach, rgba(b.halo, alpha));
+		gradient.addColorStop(1, rgba(b.halo, alpha));
+		return gradient;
+	}
+
 	// Обрыв, а не плавный спуск: иначе вместо звёзд с лучами та же паутина, только тусклее.
 	function edgeGradient(
 		x1: number,
@@ -469,14 +530,11 @@ export function createRenderer(
 		near: number,
 		far: number,
 	): CanvasGradient | string {
-		const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-
 		if (edgeMode === 'full' || length < 1 || reachA + reachB >= length) {
-			gradient.addColorStop(0, rgba(a.halo, near));
-			gradient.addColorStop(1, rgba(b.halo, near));
-			return gradient;
+			return linkGradient(x1, y1, x2, y2, a, b, near);
 		}
 
+		const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
 		const endA = reachA / length;
 		const endB = 1 - reachB / length;
 
@@ -490,10 +548,9 @@ export function createRenderer(
 	}
 
 	function drawEdges(now: number, isLit: (id: string) => boolean): void {
-		if (edgesHidden && selectedId === null) return;
+		if (edgesHidden() && selectedId === null) return;
 		ctx.save();
 		ctx.globalCompositeOperation = 'lighter';
-		ctx.lineWidth = 0.8;
 
 		for (const [a, b] of scene.edges) {
 			if (hidden.has(a.id) || hidden.has(b.id)) continue;
@@ -516,18 +573,38 @@ export function createRenderer(
 				}
 			}
 
+			const onChain = chainEdges.has(edgeKey(a.id, b.id));
 			const incident = selectedId !== null && (a.id === selectedId || b.id === selectedId);
-			if (edgesHidden && !incident) continue;
-			const both = isLit(a.id) && isLit(b.id);
-			const base = edgeMode === 'full' ? EDGE_ALPHA_PLAIN : EDGE_ALPHA_NEAR;
-			const near = incident ? 0.5 : both ? base : base * (1 - 0.65 * highlight);
-			const far = incident ? 0.5 : EDGE_ALPHA_FAR;
+			if (edgesHidden() && !incident && !onChain) continue;
 
-			const length = Math.hypot(x2 - x1, y2 - y1);
-			const reachA = a.radius * pa.scale * EDGE_GLOW_RADII;
-			const reachB = b.radius * pb.scale * EDGE_GLOW_RADII;
+			ctx.lineWidth = onChain ? EDGE_WIDTH_CHAIN : EDGE_WIDTH;
 
-			ctx.strokeStyle = edgeGradient(x1, y1, x2, y2, a, b, length, reachA, reachB, near, far);
+			if (onChain || incident) {
+				// Цепочки до самого себя нет, а друг — то же одно рукопожатие.
+				const bright = onChain || selectedId === scene.me;
+				const alpha = bright ? tuning.edge.chain : tuning.edge.selected;
+				ctx.strokeStyle = linkGradient(x1, y1, x2, y2, a, b, alpha);
+			} else {
+				const both = isLit(a.id) && isLit(b.id);
+				const base = edgeMode === 'full' ? EDGE_ALPHA_PLAIN : EDGE_ALPHA_NEAR;
+				const near = both ? base : base * (1 - 0.65 * highlight);
+				const length = Math.hypot(x2 - x1, y2 - y1);
+				const reachA = a.radius * pa.scale * EDGE_GLOW_RADII;
+				const reachB = b.radius * pb.scale * EDGE_GLOW_RADII;
+				ctx.strokeStyle = edgeGradient(
+					x1,
+					y1,
+					x2,
+					y2,
+					a,
+					b,
+					length,
+					reachA,
+					reachB,
+					near,
+					EDGE_ALPHA_FAR,
+				);
+			}
 
 			// Прямая: изгиб и колыхание читаются как второе, чужое свечение поверх языков.
 			ctx.beginPath();
@@ -1028,6 +1105,7 @@ export function createRenderer(
 		setGraph,
 		setSelection,
 		setEdgeMode,
+		setShowEdges,
 		focusOn,
 		focusOnMe: () => focusOn(scene.me),
 		// Экранные координаты звезды для окна «возможных друзей»: оно живёт вне канвы, а искре

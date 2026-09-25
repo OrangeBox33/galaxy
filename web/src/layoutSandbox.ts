@@ -1,9 +1,10 @@
 // Отладочная страница /galaxy/layout-sandbox.html: в сборку не попадает.
 // Настоящая раскладка на выдуманном графе; ползунки правят те же числа, что
 // в shared/layout/params.ts, и подобранное копируется кнопкой обратно туда.
+import { STAR_COLORS } from '../../shared/config';
 import { computeLayout, type LayoutResult } from '../../shared/layout/index';
 import { LAYOUT_PARAMS, starRadius, type LayoutOverrides } from '../../shared/layout/params';
-import { createRenderer } from './canvas/renderer';
+import { createRenderer, tuning } from './canvas/renderer';
 import { createLayoutPanel, type Bag, type Control } from './layoutPanel';
 import { buildTestGraph, DEFAULT_SHAPE, type Shape, type TestGraph } from './layout/testGraph';
 import type { Graph, GraphNode } from './api/types';
@@ -48,6 +49,14 @@ const range = (key: string, label: string, min: number, max: number, step: numbe
 	step,
 });
 
+// Треть звёзд оставлена белыми, остальным раздан настоящий цвет из палитры:
+// по белому небу не видно, докуда по связи доходит цвет.
+function sandboxColor(index: number): string | null {
+	if (index % 3 === 2) return null;
+	return STAR_COLORS[(index * 5) % STAR_COLORS.length];
+}
+
+let layoutSnapshot = '';
 let graph: TestGraph = buildTestGraph(shape);
 let result: LayoutResult | null = null;
 // Позиции прошлого прогона: с ними раскладка идёт инкрементально, как на бою.
@@ -98,6 +107,8 @@ function toGraph(layout: LayoutResult): Graph {
 		x: node.x,
 		y: node.y,
 		avatar: null,
+		coreColor: sandboxColor(i),
+		flameColor: sandboxColor(i),
 		isTest: true,
 		isBlocked: false,
 	}));
@@ -310,10 +321,18 @@ function addStar(friends: number): void {
 }
 
 const canvas = document.getElementById('sky') as HTMLCanvasElement;
+let selected: string | null = null;
 const renderer = createRenderer(
 	canvas,
-	{ onPick: () => {}, onHover: () => {} },
-	{ showEdges: true },
+	{
+		// Выбор здесь только ради связей: цепочку и её соседей иначе не увидеть.
+		onPick: (pick) => {
+			selected = pick.kind === 'node' && pick.id !== selected ? pick.id : null;
+			renderer.setSelection(selected);
+		},
+		onHover: () => {},
+	},
+	{ showEdges: Boolean(view.showEdges) },
 );
 
 const panel = createLayoutPanel({
@@ -321,9 +340,23 @@ const panel = createLayoutPanel({
 	snapshot: () => ({ params, shape }),
 	onChange: () => {
 		renderer.camera.minZoomFactor = Number(view.minZoomFactor);
+		renderer.setShowEdges(Boolean(view.showEdges));
+		// Ползунки связей до раскладки не касаются: пересчитывать её незачем.
+		const next = JSON.stringify([params, shape]);
+		if (next === layoutSnapshot) return;
+		layoutSnapshot = next;
 		schedule();
 	},
 	sections: [
+		{
+			title: 'Связи выбранной звезды',
+			bag: tuning.edge as unknown as Bag,
+			controls: [
+				range('chain', 'яркость цепочки до меня', 0, 1, 0.01),
+				range('selected', 'яркость остальных её связей', 0, 1, 0.01),
+				range('reach', 'докуда доходит цвет звезды', 0, 0.5, 0.01),
+			],
+		},
 		{
 			title: 'Вид',
 			bag: view,
@@ -435,6 +468,8 @@ function loop(): void {
 requestAnimationFrame(() => {
 	drawLegend();
 	renderer.camera.minZoomFactor = Number(view.minZoomFactor);
+	renderer.setShowEdges(Boolean(view.showEdges));
+	layoutSnapshot = JSON.stringify([params, shape]);
 	recompute(true);
 	requestAnimationFrame(() => renderer.fit());
 	loop();
