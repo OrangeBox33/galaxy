@@ -210,20 +210,6 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 				>
 					⤢
 				</button>
-				<button
-					className="round"
-					title="Приблизить"
-					onClick={() => rendererRef.current?.zoomBy(1.3)}
-				>
-					+
-				</button>
-				<button
-					className="round"
-					title="Отдалить"
-					onClick={() => rendererRef.current?.zoomBy(1 / 1.3)}
-				>
-					−
-				</button>
 			</div>
 
 			{!firstRun && <Suggestions starAt={(id) => rendererRef.current?.screenOf(id) ?? null} />}

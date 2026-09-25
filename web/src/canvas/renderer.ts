@@ -1139,7 +1139,6 @@ export function createRenderer(
 				birth = { id, start: performance.now(), done: resolve };
 			});
 		},
-		zoomBy: (factor: number) => camera.zoomAt(factor, cssWidth / 2, cssHeight / 2),
 		fit: () => camera.fit(scene.bounds),
 		destroy(): void {
 			running = false;
