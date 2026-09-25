@@ -52,6 +52,10 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 		setSheet('intro');
 	}, [profile?.needsBirth, profile?.id]);
 
+	// Заведённому заранее (холодный старт) подсказки нашлись бы сразу: до рождения
+	// и выбора цвета они висели бы поверх первого входа.
+	const firstRun = Boolean(profile?.needsBirth) || sheet === 'intro' || sheet === 'colors';
+
 	async function birth(): Promise<void> {
 		const id = profile?.id;
 		if (!id) return;
@@ -222,7 +226,7 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 				</button>
 			</div>
 
-			<Suggestions starAt={(id) => rendererRef.current?.screenOf(id) ?? null} />
+			{!firstRun && <Suggestions starAt={(id) => rendererRef.current?.screenOf(id) ?? null} />}
 
 			<StarCard
 				onEditProfile={() => setSheet('profile')}

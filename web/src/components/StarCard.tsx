@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { Gender } from '../../../shared/config';
 import { mutualFriends, neighbourMap, shortestPath } from '../../../shared/path';
 import { playLink } from '../sound';
 import { useStore } from '../store';
@@ -6,6 +7,38 @@ import { invites } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Avatar } from './Avatar';
 import { openShare } from '../telegram/webapp';
+
+function years(n: number) {
+	const tens = n % 100;
+	if (tens >= 11 && tens <= 14) return 'лет';
+	const ones = n % 10;
+	if (ones === 1) return 'год';
+	if (ones >= 2 && ones <= 4) return 'года';
+	return 'лет';
+}
+
+function GenderMark({ gender }: { gender: Gender }) {
+	if (gender === 'UNSPECIFIED') return null;
+	const male = gender === 'MALE';
+	return (
+		<svg
+			className="card__gender"
+			viewBox="0 0 8 10"
+			width="8"
+			height="10"
+			style={{ color: male ? 'rgba(154, 196, 255, 0.9)' : 'rgba(255, 146, 154, 0.9)' }}
+			aria-label={male ? 'мужчина' : 'женщина'}
+		>
+			<polygon
+				points={male ? '0.8,0.8 7.2,0.8 4,9.2' : '4,0.8 0.8,9.2 7.2,9.2'}
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
 
 function handshakes(steps: number): string {
 	const tens = steps % 100;
@@ -55,7 +88,6 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 	if (selection.kind === 'invite') {
 		const invite = graph.pending.find((item) => item.id === selection.id);
 		if (!invite) return null;
-		const url = `https://t.me/share?startapp=${invite.token}`;
 		return (
 			<div className="card">
 				<button className="card__close" onClick={close}>
@@ -75,7 +107,10 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 						className="btn"
 						disabled={busy}
 						onClick={() =>
-							openShare(url, 'Открой ссылку, и рядом с моей звездой загорится твоя.')
+							openShare(
+								invite.url,
+								'Открой ссылку, и рядом с моей звездой зажжётся твоя.',
+							)
 						}
 					>
 						Отправить ещё раз
@@ -116,8 +151,13 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 						{node.name}
 					</div>
 					<div className="card__meta">
-						{node.age !== null && <span>{node.age} лет · </span>}
-						<span>друзей: {node.degree}</span>
+						{node.gender !== 'UNSPECIFIED' && (
+							<span>
+								<GenderMark gender={node.gender} /> ·{' '}
+							</span>
+						)}
+						{node.age !== null && <span>{node.age} {years(node.age)} · </span>}
+						<span>связей: {node.degree}</span>
 						{node.isTest && <span className="card__badge">тестовая</span>}
 						{node.isBlocked && <span className="card__badge">погасла</span>}
 					</div>

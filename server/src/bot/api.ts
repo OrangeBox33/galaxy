@@ -16,14 +16,7 @@ function isFatal(description: string): boolean {
 	);
 }
 
-async function call(method: string, payload: unknown): Promise<unknown> {
-	const res = await fetch(`${BASE}/${method}`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(payload),
-		signal: AbortSignal.timeout(10_000),
-	});
-
+async function parse(res: Response): Promise<unknown> {
 	const data = (await res.json()) as { ok: boolean; description?: string; result?: unknown };
 	if (!data.ok) {
 		const error = new Error(data.description ?? `ошибка ${res.status}`) as TelegramError;
@@ -32,6 +25,17 @@ async function call(method: string, payload: unknown): Promise<unknown> {
 		throw error;
 	}
 	return data.result;
+}
+
+async function call(method: string, payload: unknown): Promise<unknown> {
+	return parse(
+		await fetch(`${BASE}/${method}`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload),
+			signal: AbortSignal.timeout(10_000),
+		}),
+	);
 }
 
 export async function sendMessage(
@@ -46,6 +50,48 @@ export async function sendMessage(
 		disable_web_page_preview: true,
 		...(replyMarkup ? { reply_markup: replyMarkup } : {}),
 	});
+}
+
+// Файл уходит multipart'ом: JSON'ом Bot API документы не принимает, поэтому
+// мимо call(). Content-Type не ставим — fetch сам допишет границу частей.
+export async function sendDocument(
+	chatId: bigint,
+	filename: string,
+	bytes: Buffer,
+	caption: string,
+): Promise<void> {
+	const form = new FormData();
+	form.append('chat_id', chatId.toString());
+	form.append('caption', caption);
+	form.append('document', new Blob([bytes]), filename);
+
+	await parse(
+		await fetch(`${BASE}/sendDocument`, {
+			method: 'POST',
+			body: form,
+			signal: AbortSignal.timeout(120_000),
+		}),
+	);
+}
+
+// Аватарка через Bot API, а не через photo_url из initData: у того публичный
+// CDN обрезан на 320 px, здесь доступны все размеры, вплоть до 640. Работает
+// только для тех, у кого с ботом есть чат, — то есть после «Запустить».
+export async function profilePhotoUrl(userId: bigint): Promise<string | null> {
+	const photos = (await call('getUserProfilePhotos', {
+		user_id: Number(userId),
+		limit: 1,
+	})) as { photos?: { file_id: string }[][] };
+
+	const sizes = photos.photos?.[0];
+	if (!sizes?.length) return null;
+
+	const file = (await call('getFile', { file_id: sizes[sizes.length - 1].file_id })) as {
+		file_path?: string;
+	};
+	if (!file.file_path) return null;
+
+	return `${BASE.replace('/bot', '/file/bot')}/${file.file_path}`;
 }
 
 export async function setWebhook(url: string): Promise<void> {

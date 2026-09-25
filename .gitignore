@@ -2,6 +2,7 @@ node_modules/
 dist/
 .deploy/
 .env
+.env.local
 .DS_Store
 *.log
 comm.md

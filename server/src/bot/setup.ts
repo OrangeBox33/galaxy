@@ -11,7 +11,7 @@ async function main(): Promise<void> {
 	console.log('\nОсталось сделать в BotFather:');
 	console.log('  /mybots → выбрать бота → Bot Settings → Configure Mini App → Enable');
 	console.log(`  URL приложения: ${env.publicBaseUrl}`);
-	console.log('  Без этого ссылки-приглашения вида t.me/<бот>?startapp=<токен> не сработают.\n');
+	console.log('  Без этого ссылки-приглашения вида t.me/<бот>?start=<токен> не сработают.\n');
 
 	const info = (await getWebhookInfo()) as {
 		url?: string;

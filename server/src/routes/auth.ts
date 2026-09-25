@@ -10,10 +10,7 @@ import { verifyInitData } from '../auth/initData.js';
 import { clearSession, issueSession } from '../auth/session.js';
 import { acceptInvite } from './invites.js';
 import { markLayoutDirty } from '../layout/state.js';
-import { scheduleAvatarFetch } from '../avatars/queue.js';
-
-// Аватарка меняется редко: обновляем не чаще раза в неделю.
-const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+import { AVATAR_TTL_MS, scheduleAvatarFetch } from '../avatars/queue.js';
 
 export function authRouter(): Router {
 	const router = Router();
@@ -55,6 +52,9 @@ export function authRouter(): Router {
 
 				await ensureInviteToken(tx, saved);
 				if (isNew) await markLayoutDirty(tx);
+
+				// Ссылки ведут в чат с ботом, и там же человек заводится и связывается.
+				// start_param остаётся ради старых startapp-ссылок из чужих переписок.
 				if (data.startParam) await acceptInvite(tx, saved.id, data.startParam);
 
 				return tx.user.findUniqueOrThrow({ where: { id: saved.id } });

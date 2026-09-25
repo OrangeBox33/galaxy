@@ -233,7 +233,7 @@ describe('постоянная ссылка', () => {
 
 		expect(res.status).toBe(200);
 		const token = await tokenOf(100n);
-		expect(res.body.inviteUrl).toBe(`https://t.me/test_bot?startapp=${token}`);
+		expect(res.body.inviteUrl).toBe(`https://t.me/test_bot?start=${token}`);
 	});
 
 	it('токен короткий, строчный и без служебных знаков', async () => {
@@ -265,7 +265,7 @@ describe('постоянная ссылка', () => {
 
 		const res = await call('GET', '/api/me', { as: old });
 
-		expect(res.body.inviteUrl).toMatch(/^https:\/\/t\.me\/test_bot\?startapp=[0-9a-z]{3}$/);
+		expect(res.body.inviteUrl).toMatch(/^https:\/\/t\.me\/test_bot\?start=[0-9a-z]{3}$/);
 	});
 
 	it('ссылка не меняется от входа к входу', async () => {
@@ -282,7 +282,7 @@ describe('постоянная ссылка', () => {
 
 		const res = await login(100);
 
-		expect(res.body.inviteUrl).toContain('startapp=');
+		expect(res.body.inviteUrl).toContain('start=');
 	});
 
 	it('по одной ссылке связываются все, кто по ней пришёл', async () => {

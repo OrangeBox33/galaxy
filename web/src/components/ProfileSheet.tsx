@@ -1,7 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
-	AGE_MAX,
-	AGE_MIN,
 	DEFAULT_CORE_COLOR,
 	DEFAULT_FLAME_COLOR,
 	STAR_COLORS,
@@ -15,8 +13,10 @@ import { Avatar } from './Avatar';
 const GENDER_LABELS: { value: Gender; label: string }[] = [
 	{ value: 'FEMALE', label: 'Женский' },
 	{ value: 'MALE', label: 'Мужской' },
-	{ value: 'UNSPECIFIED', label: 'Не указывать' },
+	{ value: 'UNSPECIFIED', label: '—' },
 ];
+
+const SWIPE_CLOSE_PX = 90;
 
 // Три наполнения: знакомство до рождения звезды, выбор цветов сразу после него
 // и полный профиль по нажатию на свою звезду.
@@ -43,6 +43,9 @@ export function ProfileSheet({
 	const [error, setError] = useState<string | null>(null);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 
+	const bodyRef = useRef<HTMLDivElement>(null);
+	const drag = useRef<{ pointer: number; from: number } | null>(null);
+
 	if (!profile) return null;
 	const withColors = variant !== 'intro';
 	const withFields = variant !== 'colors';
@@ -56,6 +59,32 @@ export function ProfileSheet({
 	function pickFlame(color: string): void {
 		setFlameColor(color);
 		previewColors({ core: coreColor, flame: color });
+	}
+
+	function gripDown(event: React.PointerEvent<HTMLDivElement>): void {
+		drag.current = { pointer: event.pointerId, from: event.clientY };
+		event.currentTarget.setPointerCapture(event.pointerId);
+	}
+
+	function gripMove(event: React.PointerEvent<HTMLDivElement>): void {
+		if (drag.current?.pointer !== event.pointerId) return;
+		const shift = Math.max(0, event.clientY - drag.current.from);
+		const body = bodyRef.current;
+		if (!body) return;
+		body.style.transition = 'none';
+		body.style.transform = `translateY(${shift}px)`;
+	}
+
+	function gripUp(event: React.PointerEvent<HTMLDivElement>): void {
+		if (drag.current?.pointer !== event.pointerId) return;
+		const shift = Math.max(0, event.clientY - drag.current.from);
+		drag.current = null;
+		const body = bodyRef.current;
+		if (body) {
+			body.style.transition = '';
+			body.style.transform = '';
+		}
+		if (shift > SWIPE_CLOSE_PX) onClose();
 	}
 
 	async function save(): Promise<void> {
@@ -97,11 +126,11 @@ export function ProfileSheet({
 	// Окно цветов не закрывает небо: звезда должна быть видна, пока её красят.
 	if (variant === 'colors') {
 		return (
-			<div className="sheet sheet--bare">
+			<div className="sheet sheet--bare sheet--colors">
 				<div className="sheet__body">
 					<h2>Цвет вашей звезды</h2>
 					<div className="field">
-						<span>Сердцевина</span>
+						<span>Ядро</span>
 						<Palette value={coreColor} onPick={pickCore} />
 					</div>
 					<div className="field">
@@ -119,71 +148,95 @@ export function ProfileSheet({
 		);
 	}
 
+	const nameInput = (
+		<input
+			value={name}
+			maxLength={32}
+			disabled={profile.nameLockedByAdmin}
+			onChange={(event) => setName(event.target.value)}
+		/>
+	);
+
+	const ageInput = (
+		<input
+			value={age}
+			inputMode="numeric"
+			placeholder="—"
+			onChange={(event) => setAge(event.target.value.replace(/\D/g, '').slice(0, 3))}
+		/>
+	);
+
+	const lockedNote = profile.nameLockedByAdmin ? (
+		<small>Имя изменено администратором, поменять его нельзя.</small>
+	) : null;
+
+	const genderPicker = (
+		<div className="segmented segmented--tight">
+			{GENDER_LABELS.map((option) => (
+				<button
+					key={option.value}
+					className={
+						gender === option.value ? 'segmented__item is-active' : 'segmented__item'
+					}
+					title={option.value === 'UNSPECIFIED' ? 'Не указывать' : option.label}
+					onClick={() => setGender(option.value)}
+				>
+					{option.label}
+				</button>
+			))}
+		</div>
+	);
+
+	const swipeable = variant === 'full';
+
 	return (
-		<div className="sheet">
-			<div className="sheet__body">
+		<div className={swipeable ? 'sheet sheet--bare sheet--profile' : 'sheet'}>
+			<div className="sheet__body" ref={bodyRef}>
+				{swipeable && (
+					<>
+						<div
+							className="sheet__grip"
+							onPointerDown={gripDown}
+							onPointerMove={gripMove}
+							onPointerUp={gripUp}
+							onPointerCancel={gripUp}
+						/>
+						<button className="sheet__close" onClick={onClose}>
+							×
+						</button>
+					</>
+				)}
+
 				<div className="sheet__head">
 					<Avatar name={profile.name} file={profile.avatar} gender={gender} size={64} />
-					<div>
-						<h2>Ваша звезда</h2>
-						<p className="sheet__hint">
-							Возраст и пол Telegram не передаёт — их указываете только вы.
-						</p>
-					</div>
+					<h2>Ваша звезда</h2>
 				</div>
 
 				<label className="field">
 					<span>Имя</span>
-					<input
-						value={name}
-						maxLength={32}
-						disabled={profile.nameLockedByAdmin}
-						onChange={(event) => setName(event.target.value)}
-					/>
-					{profile.nameLockedByAdmin && (
-						<small>Имя изменено администратором, поменять его нельзя.</small>
-					)}
+					{nameInput}
 				</label>
-
-				<label className="field">
-					<span>Возраст</span>
-					<input
-						value={age}
-						inputMode="numeric"
-						placeholder="не указан"
-						onChange={(event) => setAge(event.target.value.replace(/\D/g, '').slice(0, 3))}
-					/>
-					<small>
-						от {AGE_MIN} до {AGE_MAX}, можно оставить пустым
-					</small>
-				</label>
-
-				<div className="field">
-					<span>Пол</span>
-					<div className="segmented">
-						{GENDER_LABELS.map((option) => (
-							<button
-								key={option.value}
-								className={gender === option.value ? 'segmented__item is-active' : 'segmented__item'}
-								onClick={() => setGender(option.value)}
-							>
-								{option.label}
-							</button>
-						))}
+				{lockedNote}
+				<div className="row">
+					<label className="field row__age">
+						<span>Возраст</span>
+						{ageInput}
+					</label>
+					<div className="field row__wide">
+						<span>Пол</span>
+						{genderPicker}
 					</div>
-					<small>Пол даёт звезде лёгкий оттенок — тёплый или холодный.</small>
 				</div>
 
 				{withColors && (
 					<>
 						<div className="field">
-							<span>Цвет сердцевины</span>
+							<span>Цвет ядра</span>
 							<Palette value={coreColor} onPick={pickCore} />
 						</div>
 						<div className="field">
 							<span>Цвет пламени</span>
 							<Palette value={flameColor} onPick={pickFlame} />
-							<small>Кромка ядра остаётся белой у всех — по ней звезда и читается.</small>
 						</div>
 					</>
 				)}
@@ -204,15 +257,25 @@ export function ProfileSheet({
 						{confirmDelete ? (
 							<>
 								<span>Удалить профиль вместе со всеми связями?</span>
-								<button className="btn btn--danger" disabled={busy} onClick={() => void remove()}>
+								<button
+									className="btn btn--danger"
+									disabled={busy}
+									onClick={() => void remove()}
+								>
 									Да, удалить
 								</button>
-								<button className="btn btn--ghost" onClick={() => setConfirmDelete(false)}>
+								<button
+									className="btn btn--ghost"
+									onClick={() => setConfirmDelete(false)}
+								>
 									Отмена
 								</button>
 							</>
 						) : (
-							<button className="btn btn--quiet" onClick={() => setConfirmDelete(true)}>
+							<button
+								className="btn btn--quiet"
+								onClick={() => setConfirmDelete(true)}
+							>
 								Удалить мой профиль
 							</button>
 						)}

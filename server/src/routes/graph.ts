@@ -2,6 +2,7 @@
 // и сразу после своего действия; WebSocket и SSE намеренно не используются.
 import { Router } from 'express';
 import { db } from '../db.js';
+import { inviteUrl } from '../lib/inviteLink.js';
 import { displayName } from '../lib/names.js';
 import { requireActiveUser, requireSession } from '../auth/middleware.js';
 import { getLayoutScale, getLayoutVersion } from '../layout/state.js';
@@ -14,23 +15,24 @@ export function graphRouter(): Router {
 		try {
 			const userId = req.userId!;
 
-			const [users, links, pending, dismissed, layoutVersion, layoutScale] = await Promise.all([
-				db.user.findMany({ orderBy: { id: 'asc' } }),
-				db.link.findMany({ select: { aId: true, bId: true } }),
-				// Чужие тусклые точки не отдаются никогда, даже админу.
-				db.invite.findMany({
-					where: { inviterId: userId, status: 'PENDING' },
-					orderBy: { createdAt: 'asc' },
-				}),
-				// Кого этот человек отклонил в окне возможных друзей: клиент
-				// вычитает этот список из подсказок сам.
-				db.suggestionDismissal.findMany({
-					where: { userId },
-					select: { targetId: true },
-				}),
-				getLayoutVersion(),
-				getLayoutScale(),
-			]);
+			const [users, links, pending, dismissed, layoutVersion, layoutScale] =
+				await Promise.all([
+					db.user.findMany({ orderBy: { id: 'asc' } }),
+					db.link.findMany({ select: { aId: true, bId: true } }),
+					// Чужие тусклые точки не отдаются никогда, даже админу.
+					db.invite.findMany({
+						where: { inviterId: userId, status: 'PENDING' },
+						orderBy: { createdAt: 'asc' },
+					}),
+					// Кого этот человек отклонил в окне возможных друзей: клиент
+					// вычитает этот список из подсказок сам.
+					db.suggestionDismissal.findMany({
+						where: { userId },
+						select: { targetId: true },
+					}),
+					getLayoutVersion(),
+					getLayoutScale(),
+				]);
 
 			res.json({
 				layoutVersion,
@@ -57,6 +59,7 @@ export function graphRouter(): Router {
 				pending: pending.map((invite) => ({
 					id: invite.id,
 					token: invite.token,
+					url: inviteUrl(invite.token),
 					label: invite.label,
 					createdAt: invite.createdAt.toISOString(),
 				})),

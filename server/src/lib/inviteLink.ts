@@ -7,11 +7,12 @@ import { env } from '../env.js';
 export const SHARE_TEXT =
 	'Привет! Я собираю карту своих друзей и знакомых — она выглядит как звёздное небо, ' +
 	'где каждый человек звезда, а знакомства — линии между ними. ' +
-	'Открой ссылку, и рядом с моей звездой загорится твоя.';
+	'Открой ссылку, и рядом с моей звездой зажжётся твоя.';
 
-// startapp (а не start) открывает Mini App сразу, минуя чат с ботом.
+// start (а не startapp) ведёт в чат с ботом, а не сразу в Mini App: без этого
+// чата бот не может написать человеку — рассылка падала с «chat not found».
 export function inviteUrl(token: string): string {
-	return `https://t.me/${env.botUsername}?startapp=${token}`;
+	return `https://t.me/${env.botUsername}?start=${token}`;
 }
 
 // Три знака, цифры и строчная латиница: ссылка видна целиком в сообщении
@@ -60,10 +61,7 @@ export async function freshInviteToken(tx: Prisma.TransactionClient): Promise<st
 
 // Токен выдаётся один раз и больше не меняется. Nullable в схеме — ради строк,
 // заведённых до постоянных ссылок: им токен достаётся при первом обращении.
-export async function ensureInviteToken(
-	tx: Prisma.TransactionClient,
-	user: User,
-): Promise<User> {
+export async function ensureInviteToken(tx: Prisma.TransactionClient, user: User): Promise<User> {
 	if (user.inviteToken) return user;
 	return tx.user.update({
 		where: { id: user.id },

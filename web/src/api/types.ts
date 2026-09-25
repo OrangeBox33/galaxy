@@ -40,6 +40,7 @@ export type GraphNode = {
 export type PendingInvite = {
 	id: string;
 	token: string;
+	url: string;
 	label: string | null;
 	createdAt: string;
 };

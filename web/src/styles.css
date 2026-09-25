@@ -172,6 +172,10 @@ button {
 	margin-top: 2px;
 }
 
+.card__gender {
+	filter: drop-shadow(0 0 2.5px currentColor);
+}
+
 .card__badge {
 	margin-left: 6px;
 	padding: 1px 6px;
@@ -257,6 +261,7 @@ button {
 }
 
 .sheet__body {
+	position: relative;
 	width: min(460px, 100%);
 	max-height: 92vh;
 	overflow: auto;
@@ -274,12 +279,80 @@ button {
 	.sheet__body {
 		border-radius: 20px;
 	}
+
+	/* Окно цветов — у нижнего края: звезда остаётся выше него. */
+	.sheet--colors {
+		align-items: flex-end;
+	}
+	.sheet--colors .sheet__body {
+		margin-bottom: 18px;
+	}
+
+	/* Профиль садится в тот же угол, что и карточка звезды, и целиком без
+	   прокрутки: середина экрана занята своей звездой. */
+	.sheet--profile {
+		align-items: flex-end;
+		justify-content: flex-start;
+	}
+	.sheet--profile .sheet__body {
+		width: 360px;
+		max-height: calc(100vh - 32px);
+		margin: 0 0 16px 12px;
+		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+	}
+	.sheet--profile .sheet__grip {
+		display: none;
+	}
+	.sheet--profile .sheet__close {
+		display: block;
+	}
 }
 
 .sheet__body h2 {
 	margin: 0 0 4px;
 	font-size: 18px;
 	font-weight: 500;
+}
+
+/* Полоска-ручка: свайп вниз закрывает окно. touch-action снимает прокрутку,
+   иначе жест уедет в список. */
+.sheet__grip {
+	height: 20px;
+	margin: -10px 0 4px;
+	touch-action: none;
+	cursor: grab;
+}
+
+.sheet__grip::after {
+	content: '';
+	display: block;
+	width: 38px;
+	height: 4px;
+	margin: 6px auto 0;
+	border-radius: 2px;
+	background: var(--panel-edge);
+}
+
+.sheet__body {
+	transition: transform 180ms ease;
+}
+
+/* Половина экрана: остальное — небо, по нему и выбирают цвет. */
+.sheet--profile .sheet__body {
+	max-height: 50vh;
+}
+
+.sheet__close {
+	position: absolute;
+	top: 8px;
+	right: 12px;
+	display: none;
+	border: 0;
+	background: none;
+	color: var(--text-dim);
+	font-size: 22px;
+	line-height: 1;
+	cursor: pointer;
 }
 
 .sheet__head {
@@ -327,6 +400,21 @@ button {
 	margin-top: 14px;
 }
 
+.row {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+}
+
+.row__wide {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.row__age {
+	flex: 0 0 84px;
+}
+
 .field > span {
 	display: block;
 	margin-bottom: 6px;
@@ -340,6 +428,10 @@ button {
 	border-radius: 10px;
 	border: 1px solid var(--panel-edge);
 	background: rgba(4, 6, 14, 0.6);
+}
+
+.field input::placeholder {
+	color: var(--text-dim);
 }
 
 .field input:disabled {
@@ -358,6 +450,15 @@ button {
 	border: 1px solid var(--panel-edge);
 	background: none;
 	cursor: pointer;
+}
+
+.segmented--tight {
+	gap: 4px;
+}
+
+.segmented--tight .segmented__item {
+	padding: 6px 4px;
+	font-size: 12.5px;
 }
 
 .segmented__item.is-active {
@@ -720,8 +821,7 @@ button {
 		0 0 0 4px rgba(233, 240, 255, 0.9);
 }
 
-/* Окно выбора цвета: без затемнения и по высоте содержимого — звезду красят,
-   глядя на неё же, значит небо должно остаться видимым и живым. */
+/* Окна с палитрой не закрывают небо: звезду красят, глядя на неё же. */
 .sheet--bare {
 	background: none;
 	backdrop-filter: none;

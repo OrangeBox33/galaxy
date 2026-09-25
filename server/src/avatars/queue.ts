@@ -7,18 +7,24 @@ import sharp from 'sharp';
 import { db } from '../db.js';
 import { env } from '../env.js';
 import { log } from '../lib/log.js';
+import { profilePhotoUrl } from '../bot/api.js';
 
 const CONCURRENCY = 2;
 const TIMEOUT_MS = 5000;
 const MAX_BYTES = 2 * 1024 * 1024;
 
-type Task = { userId: bigint; photoUrl: string };
+// Аватарка меняется редко: обновляем не чаще раза в неделю.
+export const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// null — адрес узнаём у Bot API: после «Запустить» он даёт картинку крупнее,
+// чем photo_url из initData.
+type Task = { userId: bigint; photoUrl: string | null };
 
 const queue: Task[] = [];
 const queued = new Set<string>();
 let running = 0;
 
-export function scheduleAvatarFetch(userId: bigint, photoUrl: string): void {
+export function scheduleAvatarFetch(userId: bigint, photoUrl: string | null): void {
 	const key = userId.toString();
 	if (queued.has(key)) return;
 	queued.add(key);
@@ -55,10 +61,18 @@ async function download(url: string): Promise<Buffer> {
 }
 
 async function process(task: Task): Promise<void> {
-	const source = await download(task.photoUrl);
+	const url = task.photoUrl ?? (await profilePhotoUrl(task.userId));
+	if (!url) return;
 
-	// 64×64 webp — это 2–4 КБ: на 200 пользователей меньше мегабайта суммарно.
-	const image = await sharp(source).resize(64, 64, { fit: 'cover' }).webp({ quality: 80 }).toBuffer();
+	const source = await download(url);
+
+	// 192 px — тройной запас под самый крупный показ (64 CSS-px), иначе retina
+	// растягивает картинку втрое и она рассыпается. Выше 320 Telegram не отдаёт.
+	// webp q80 на этом размере — 6 КБ против 15 КБ у исходного jpeg.
+	const image = await sharp(source)
+		.resize(192, 192, { fit: 'cover' })
+		.webp({ quality: 80 })
+		.toBuffer();
 
 	const hash = createHash('sha1').update(image).digest('hex').slice(0, 8);
 	const file = `${task.userId}-${hash}.webp`;

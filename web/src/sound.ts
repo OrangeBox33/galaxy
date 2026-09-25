@@ -108,7 +108,7 @@ export const soundTuning = {
 	voice: 'pad' as VoiceKey,
 	spark: 'shimmer' as SparkKey,
 
-	volume: 0.5,
+	volume: 0.3,
 	reverb: 0.2, // секунд хвоста
 	wet: 0.35,
 	root: 220, // Гц, нота самой крупной звезды
