@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { playLink } from '../sound';
 import { useStore } from '../store';
 import { invites } from '../api/endpoints';
 import { ApiError } from '../api/client';
@@ -62,7 +63,9 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 					<button
 						className="btn"
 						disabled={busy}
-						onClick={() => openShare(url, 'Открой ссылку, и рядом с моей звездой загорится твоя.')}
+						onClick={() =>
+							openShare(url, 'Открой ссылку, и рядом с моей звездой загорится твоя.')
+						}
 					>
 						Отправить ещё раз
 					</button>
@@ -83,6 +86,7 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 	if (!node) return null;
 
 	const isMe = node.id === graph.me;
+	const myDegree = graph.nodes.find((item) => item.id === graph.me)?.degree ?? 0;
 	const linked = graph.edges.some(
 		([a, b]) => (a === graph.me && b === node.id) || (b === graph.me && a === node.id),
 	);
@@ -124,7 +128,10 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 					<button
 						className="btn"
 						disabled={busy || node.isBlocked}
-						onClick={() => void run(() => linkWith(node.id), false)}
+						onClick={() => {
+							playLink(myDegree, node.degree);
+							void run(() => linkWith(node.id), false);
+						}}
 					>
 						Связать
 					</button>

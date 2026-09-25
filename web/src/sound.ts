@@ -114,7 +114,7 @@ export const soundTuning = {
 	root: 220, // Гц, нота самой крупной звезды
 	span: 29, // полутонов между звездой на 150 связей и одиночкой
 
-	clickLevel: 0.15,
+	clickLevel: 0.1,
 	clickDecay: 0.5,
 	clickPartials: 0.55,
 	clickTick: 0.22, // щелчок атаки: без него удар неотличим от свиста
@@ -129,7 +129,7 @@ export const soundTuning = {
 	birthTail: 5,
 	birthDrop: 18, // на сколько полутонов аккорд ниже ноты самой звезды
 
-	linkLevel: 0.2,
+	linkLevel: 0.1,
 	linkGap: 0.4, // секунд до ответной ноты: столько летит искра
 	linkLift: 0, // полутонов вверх у ответной ноты
 	linkSpark: 0.5,
