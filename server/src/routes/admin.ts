@@ -41,18 +41,9 @@ export function adminRouter(): Router {
 			const users = await db.user.findMany({
 				orderBy: { id: 'asc' },
 				include: {
-					_count: { select: { linksA: true, linksB: true, invitesSent: true } },
+					_count: { select: { linksA: true, linksB: true } },
 				},
 			});
-
-			const accepted = await db.invite.groupBy({
-				by: ['inviterId'],
-				where: { status: 'ACCEPTED' },
-				_count: { _all: true },
-			});
-			const acceptedByUser = new Map(
-				accepted.map((row) => [row.inviterId.toString(), row._count._all]),
-			);
 
 			res.json(
 				users.map((user) => ({
@@ -67,8 +58,6 @@ export function adminRouter(): Router {
 					isBlocked: user.isBlocked,
 					nameLockedByAdmin: user.nameLockedByAdmin,
 					links: user._count.linksA + user._count.linksB,
-					invitesSent: user._count.invitesSent,
-					invitesAccepted: acceptedByUser.get(user.id.toString()) ?? 0,
 					createdAt: user.createdAt.toISOString(),
 					lastSeenAt: user.lastSeenAt.toISOString(),
 				})),
@@ -226,30 +215,6 @@ export function adminRouter(): Router {
 
 			await audit(req.userId!, 'delete_link', `${aId}-${bId}`);
 			res.status(204).end();
-		} catch (err) {
-			next(err);
-		}
-	});
-
-	router.get('/invites', async (_req, res, next) => {
-		try {
-			const invites = await db.invite.findMany({
-				orderBy: { createdAt: 'desc' },
-				include: { inviter: true, acceptedBy: true },
-			});
-			res.json(
-				invites.map((invite) => ({
-					id: invite.id,
-					label: invite.label,
-					status: invite.status,
-					inviterId: invite.inviterId.toString(),
-					inviterName: displayName(invite.inviter),
-					acceptedById: invite.acceptedById?.toString() ?? null,
-					acceptedByName: invite.acceptedBy ? displayName(invite.acceptedBy) : null,
-					createdAt: invite.createdAt.toISOString(),
-					acceptedAt: invite.acceptedAt?.toISOString() ?? null,
-				})),
-			);
 		} catch (err) {
 			next(err);
 		}

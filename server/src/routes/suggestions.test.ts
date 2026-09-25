@@ -80,7 +80,6 @@ describe('отказы', () => {
 	beforeEach(async () => {
 		await db.suggestionDismissal.deleteMany();
 		await db.link.deleteMany();
-		await db.invite.deleteMany();
 		await db.botOutbox.deleteMany();
 		await db.user.deleteMany();
 	});

@@ -1,4 +1,4 @@
-import type { Graph, GraphNode, PendingInvite } from '../api/types';
+import type { Graph, GraphNode } from '../api/types';
 import { haloColor, parseHex, type RGB } from './palette';
 import { randomFor } from './prng';
 // Радиус — из общего кода: им же раскладка разводит звёзды, чтобы не налезали друг на друга.
@@ -7,7 +7,6 @@ import { starRadius } from '../../../shared/layout/params';
 const MOVE_MS = 1200;
 const APPEAR_MS = 900;
 export const DRAW_EDGE_MS = 400;
-const INVITE_RADIUS = 52;
 
 export type Star = {
 	id: string;
@@ -41,21 +40,11 @@ export type Star = {
 	ovy: number;
 };
 
-export type InviteDot = {
-	id: string;
-	token: string;
-	label: string | null;
-	inviterId: string;
-	x: number;
-	y: number;
-};
-
 export type Scene = {
 	stars: Map<string, Star>;
 	order: Star[];
 	byRadius: Star[];
 	edges: [Star, Star][];
-	invites: InviteDot[];
 	neighbours: Map<string, Set<string>>;
 	bounds: { minX: number; minY: number; maxX: number; maxY: number };
 	layoutVersion: number;
@@ -68,7 +57,6 @@ export function emptyScene(): Scene {
 		order: [],
 		byRadius: [],
 		edges: [],
-		invites: [],
 		neighbours: new Map(),
 		bounds: { minX: -500, minY: -500, maxX: 500, maxY: 500 },
 		layoutVersion: -1,
@@ -160,44 +148,20 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 		neighbours.get(bId)!.add(aId);
 	}
 
-	const invites = placeInvites(graph.pending, stars, graph.me);
-
 	return {
 		stars,
 		// Чтобы хабы не оказались под чужими ореолами.
 		order: [...stars.values()].sort((a, b) => a.depth - b.depth || a.radius - b.radius),
 		byRadius: [...stars.values()].sort((a, b) => b.radius - a.radius),
 		edges,
-		invites,
 		neighbours,
-		bounds: computeBounds(stars, invites),
+		bounds: computeBounds(stars),
 		layoutVersion: graph.layoutVersion,
 		me: graph.me,
 	};
 }
 
-function placeInvites(
-	pending: PendingInvite[],
-	stars: Map<string, Star>,
-	me: string,
-): InviteDot[] {
-	const inviter = stars.get(me);
-	if (!inviter) return [];
-
-	return pending.map((invite) => {
-		const angle = randomFor(invite.token)() * Math.PI * 2;
-		return {
-			id: invite.id,
-			token: invite.token,
-			label: invite.label,
-			inviterId: me,
-			x: inviter.toX + INVITE_RADIUS * Math.cos(angle),
-			y: inviter.toY + INVITE_RADIUS * Math.sin(angle),
-		};
-	});
-}
-
-function computeBounds(stars: Map<string, Star>, invites: InviteDot[]) {
+function computeBounds(stars: Map<string, Star>) {
 	let minX = Infinity;
 	let minY = Infinity;
 	let maxX = -Infinity;
@@ -208,12 +172,6 @@ function computeBounds(stars: Map<string, Star>, invites: InviteDot[]) {
 		minY = Math.min(minY, star.toY);
 		maxX = Math.max(maxX, star.toX);
 		maxY = Math.max(maxY, star.toY);
-	}
-	for (const dot of invites) {
-		minX = Math.min(minX, dot.x);
-		minY = Math.min(minY, dot.y);
-		maxX = Math.max(maxX, dot.x);
-		maxY = Math.max(maxY, dot.y);
 	}
 
 	if (!Number.isFinite(minX)) return { minX: -500, minY: -500, maxX: 500, maxY: 500 };

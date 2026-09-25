@@ -5,7 +5,7 @@ import { db } from '../db.js';
 
 type Db = Prisma.TransactionClient | typeof db;
 
-export type OutboxKind = 'invite_accepted' | 'linked';
+export type OutboxKind = 'by_link' | 'linked';
 
 export async function enqueue(
 	client: Db,

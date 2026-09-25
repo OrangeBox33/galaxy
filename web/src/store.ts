@@ -10,7 +10,7 @@ import {
 import { predictLayout, type Prediction } from './layout/predict';
 import type { Graph, Profile } from './api/types';
 
-type Selection = { kind: 'node'; id: string } | { kind: 'invite'; id: string } | null;
+type Selection = { kind: 'node'; id: string } | null;
 
 const FOLLOW_UP_MS = [6000, 12000, 20000];
 

@@ -4,11 +4,10 @@ import { db } from '../db.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { str, body as reqBody } from '../lib/validate.js';
 import { sanitizeIncoming } from '../lib/names.js';
-import { ensureInviteToken } from '../lib/inviteLink.js';
+import { ensureInviteToken, linkByToken } from '../lib/inviteLink.js';
 import { toProfile } from '../lib/views.js';
 import { verifyInitData } from '../auth/initData.js';
 import { clearSession, issueSession } from '../auth/session.js';
-import { acceptInvite } from './invites.js';
 import { markLayoutDirty } from '../layout/state.js';
 import { AVATAR_TTL_MS, scheduleAvatarFetch } from '../avatars/queue.js';
 
@@ -54,8 +53,8 @@ export function authRouter(): Router {
 				if (isNew) await markLayoutDirty(tx);
 
 				// Ссылки ведут в чат с ботом, и там же человек заводится и связывается.
-				// start_param остаётся ради старых startapp-ссылок из чужих переписок.
-				if (data.startParam) await acceptInvite(tx, saved.id, data.startParam);
+				// start_param остаётся ради старых ссылок из чужих переписок.
+				if (data.startParam) await linkByToken(tx, saved.id, data.startParam);
 
 				return tx.user.findUniqueOrThrow({ where: { id: saved.id } });
 			});

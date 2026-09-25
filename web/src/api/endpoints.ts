@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { AdminLink, AdminUser, CreatedInvite, Graph, Profile } from './types';
+import type { AdminLink, AdminUser, Graph, Profile } from './types';
 import type { Gender } from '../../../shared/config';
 
 export const auth = {
@@ -24,11 +24,6 @@ export const me = {
 
 export const graph = {
 	get: () => api.get<Graph>('/graph'),
-};
-
-export const invites = {
-	create: (label?: string) => api.post<CreatedInvite>('/invites', label ? { label } : {}),
-	revoke: (id: string) => api.del<void>(`/invites/${id}`),
 };
 
 export const links = {

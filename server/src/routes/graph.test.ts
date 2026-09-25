@@ -28,7 +28,6 @@ beforeEach(async () => {
 	// Порядок важен: сначала зависимые таблицы, потом пользователи.
 	await db.botOutbox.deleteMany();
 	await db.adminAudit.deleteMany();
-	await db.invite.deleteMany();
 	await db.suggestionDismissal.deleteMany();
 	await db.link.deleteMany();
 	await db.user.deleteMany();
@@ -156,72 +155,6 @@ describe('связи', () => {
 	});
 });
 
-describe('приглашения', () => {
-	it('переход по ссылке зажигает звезду и связывает с пригласившим', async () => {
-		const inviter = await makeUser(100n, 'Хозяин');
-		const created = await call('POST', '/api/invites', { as: inviter, body: { label: 'Вася' } });
-		expect(created.status).toBe(200);
-
-		const res = await login(555, created.body.token);
-		expect(res.status).toBe(200);
-
-		const links = await db.link.findMany();
-		expect(links).toHaveLength(1);
-		expect(links[0].aId).toBe(100n);
-		expect(links[0].bId).toBe(555n);
-
-		const invite = await db.invite.findUniqueOrThrow({ where: { token: created.body.token } });
-		expect(invite.status).toBe('ACCEPTED');
-		expect(invite.acceptedById).toBe(555n);
-	});
-
-	it('повторное использование токена не создаёт дубль', async () => {
-		const inviter = await makeUser(100n, 'Хозяин');
-		const created = await call('POST', '/api/invites', { as: inviter, body: {} });
-
-		await login(555, created.body.token);
-		await login(555, created.body.token);
-		await login(777, created.body.token);
-
-		expect(await db.link.count()).toBe(1);
-		expect(await db.user.count()).toBe(3);
-	});
-
-	it('принятие собственного приглашения не создаёт петлю', async () => {
-		const inviter = await makeUser(100n, 'Хозяин');
-		const created = await call('POST', '/api/invites', { as: inviter, body: {} });
-
-		await login(100, created.body.token);
-
-		expect(await db.link.count()).toBe(0);
-		const invite = await db.invite.findUniqueOrThrow({ where: { token: created.body.token } });
-		expect(invite.status).toBe('REVOKED');
-	});
-
-	it('чужие тусклые точки не попадают в граф', async () => {
-		const mine = await makeUser(100n, 'Я');
-		const stranger = await makeUser(200n, 'Чужой');
-
-		await call('POST', '/api/invites', { as: mine, body: { label: 'моя точка' } });
-		await call('POST', '/api/invites', { as: stranger, body: { label: 'чужая точка' } });
-
-		const graph = await call('GET', '/api/graph', { as: mine });
-		expect(graph.status).toBe(200);
-		expect(graph.body.pending).toHaveLength(1);
-		expect(graph.body.pending[0].label).toBe('моя точка');
-	});
-
-	it('отозванное приглашение больше не работает', async () => {
-		const inviter = await makeUser(100n, 'Хозяин');
-		const created = await call('POST', '/api/invites', { as: inviter, body: {} });
-
-		expect((await call('DELETE', `/api/invites/${created.body.id}`, { as: inviter })).status).toBe(204);
-		await login(555, created.body.token);
-
-		expect(await db.link.count()).toBe(0);
-	});
-});
-
 describe('постоянная ссылка', () => {
 	async function tokenOf(id: bigint): Promise<string> {
 		const user = await db.user.findUniqueOrThrow({ where: { id } });
@@ -331,7 +264,7 @@ describe('постоянная ссылка', () => {
 		const outbox = await db.botOutbox.findMany();
 		expect(outbox).toHaveLength(1);
 		expect(outbox[0].userId).toBe(100n);
-		expect(outbox[0].kind).toBe('invite_accepted');
+		expect(outbox[0].kind).toBe('by_link');
 		expect(outbox[0].text).toContain('Гость');
 	});
 

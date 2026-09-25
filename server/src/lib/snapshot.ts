@@ -14,7 +14,6 @@ type Snapshot = {
 	savedAt: string;
 	users: Record<string, unknown>[];
 	links: Record<string, unknown>[];
-	invites: Record<string, unknown>[];
 	layout: Record<string, unknown> | null;
 };
 
@@ -56,9 +55,6 @@ async function save(name: string): Promise<void> {
 		links: (await db.link.findMany({ orderBy: { id: 'asc' } })).map(
 			(row) => plain(row) as Record<string, unknown>,
 		),
-		invites: (await db.invite.findMany({ orderBy: { id: 'asc' } })).map(
-			(row) => plain(row) as Record<string, unknown>,
-		),
 		layout: plain(await db.layoutState.findUnique({ where: { id: 1 } })) as Record<
 			string,
 			unknown
@@ -77,13 +73,11 @@ async function restore(name: string): Promise<void> {
 	const snapshot = JSON.parse(readFileSync(file, 'utf-8')) as Snapshot;
 
 	// Порядок важен: сначала зависимые таблицы, потом пользователи.
-	await db.invite.deleteMany();
 	await db.link.deleteMany();
 	await db.user.deleteMany();
 
 	await db.user.createMany({ data: revive(snapshot.users) as never });
 	await db.link.createMany({ data: revive(snapshot.links) as never });
-	await db.invite.createMany({ data: revive(snapshot.invites) as never });
 
 	if (snapshot.layout) {
 		const layout = revive(snapshot.layout) as { version: number; params: unknown };

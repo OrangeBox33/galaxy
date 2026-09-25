@@ -11,25 +11,17 @@ import {
 	emptyScene,
 	starPosition,
 	syncScene,
-	type InviteDot,
 	type Scene,
 	type Star,
 } from './scene';
 import { stepWobble, type Grab } from './wobble';
 import { shortestPath } from '../../../shared/path';
 
-export type Pick =
-	| { kind: 'node'; id: string }
-	| { kind: 'invite'; id: string }
-	| { kind: 'empty' };
+export type Pick = { kind: 'node'; id: string } | { kind: 'empty' };
 
 // Огрызки связей складываются в несимметричное свечение: собрались соседи слева —
 // звезда «светит» налево. Поэтому на общей карте связей нет, а у выбранной есть.
 export const EDGES_HIDDEN = true;
-
-// Точка зажигалась на создании ссылки, а не на отправке: факта отправки Telegram не даёт.
-// Механика цела целиком и возвращается сменой флага на false.
-export const INVITES_HIDDEN = true;
 
 export type EdgeMode = 'glow' | 'full';
 
@@ -43,12 +35,6 @@ const HIT_PAD_WORLD = 8;
 const HIT_PAD_MIN_SCREEN = 14;
 
 const DEPTH_STRENGTH = 0.22;
-
-// В мировых единицах, как звезда, и с гашением вместо экранного минимума: иначе
-// на отдалённой карте серые пятна в 2 px крупнее самих звёзд.
-const INVITE_DOT_WORLD = 2.5;
-const INVITE_DOT_FADE_AT = 2; // экранный радиус, ниже которого точка тает
-const INVITE_DOT_MIN_SCREEN = 0.4;
 
 // Иначе длинные перемычки между далёкими звёздами затягивают небо сеткой.
 const EDGE_GLOW_RADII = 2.5;
@@ -377,21 +363,7 @@ export function createRenderer(
 
 	function pickAt(screenX: number, screenY: number): Pick {
 		const star = pickStar(screenX, screenY);
-		if (star) return { kind: 'node', id: star.id };
-
-		if (INVITES_HIDDEN) return { kind: 'empty' };
-
-		const inviter = scene.stars.get(scene.me);
-		const depth = inviter?.depth ?? 0;
-		const scale = camera.zoom * (1 + depth * DEPTH_STRENGTH);
-		for (const dot of scene.invites) {
-			const sx = cssWidth / 2 + (dot.x - camera.x) * scale;
-			const sy = cssHeight / 2 + (dot.y - camera.y) * scale;
-			if (Math.hypot(sx - screenX, sy - screenY) <= HIT_PAD_MIN_SCREEN) {
-				return { kind: 'invite', id: dot.id };
-			}
-		}
-		return { kind: 'empty' };
+		return star ? { kind: 'node', id: star.id } : { kind: 'empty' };
 	}
 
 	function draw(now: number): void {
@@ -411,7 +383,6 @@ export function createRenderer(
 			chainNodes.has(id);
 
 		drawEdges(now, isLit);
-		drawInvites(now);
 		drawCorona(now, isLit, frame);
 		drawCores(now, isLit, frame);
 		drawBirth(frame);
@@ -611,45 +582,6 @@ export function createRenderer(
 			ctx.moveTo(x1, y1);
 			ctx.lineTo(x2, y2);
 			ctx.stroke();
-		}
-		ctx.restore();
-	}
-
-	function drawInvites(now: number): void {
-		if (INVITES_HIDDEN) return;
-		if (scene.invites.length === 0) return;
-		const inviter = scene.stars.get(scene.me);
-		if (!inviter) return;
-		const from = project(inviter, now);
-		// На глубине пригласившего: иначе пунктир расходится с его звездой.
-		const scale = camera.zoom * (1 + inviter.depth * DEPTH_STRENGTH);
-		const dotX = (dot: InviteDot): number => cssWidth / 2 + (dot.x - camera.x) * scale;
-		const dotY = (dot: InviteDot): number => cssHeight / 2 + (dot.y - camera.y) * scale;
-
-		const pulse = 0.35 + 0.2 * (0.5 + 0.5 * Math.sin((now / 1000) * ((Math.PI * 2) / 3)));
-
-		const wanted = INVITE_DOT_WORLD * scale;
-		const fade = Math.min(1, wanted / INVITE_DOT_FADE_AT);
-		const radius = Math.max(INVITE_DOT_MIN_SCREEN, wanted);
-
-		ctx.save();
-		ctx.setLineDash([3, 4]);
-		ctx.lineWidth = 1;
-		ctx.strokeStyle = rgba([0x6b, 0x72, 0x80], 0.25 * fade);
-		for (const dot of scene.invites) {
-			ctx.beginPath();
-			ctx.moveTo(from.sx, from.sy);
-			ctx.lineTo(dotX(dot), dotY(dot));
-			ctx.stroke();
-		}
-		ctx.restore();
-
-		ctx.save();
-		ctx.fillStyle = rgba([0x9c, 0xa3, 0xaf], (reduced ? 0.45 : pulse) * fade);
-		for (const dot of scene.invites) {
-			ctx.beginPath();
-			ctx.arc(dotX(dot), dotY(dot), radius, 0, Math.PI * 2);
-			ctx.fill();
 		}
 		ctx.restore();
 	}

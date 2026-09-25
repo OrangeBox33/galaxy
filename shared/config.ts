@@ -17,7 +17,6 @@ export const NAME_MAX = 32;
 export const AGE_MIN = 5;
 export const AGE_MAX = 120;
 
-export const MAX_PENDING_INVITES = 50;
 export const MAX_LINKS_PER_USER = 200;
 
 // Цвета звезды: внутренний диск и языки пламени. Кромка диска всегда белая,

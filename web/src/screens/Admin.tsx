@@ -66,7 +66,6 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 		() => ({
 			users: users.length,
 			links: users.reduce((sum, user) => sum + user.links, 0) / 2,
-			pending: users.reduce((sum, user) => sum + (user.invitesSent - user.invitesAccepted), 0),
 		}),
 		[users],
 	);
@@ -153,7 +152,6 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 				<div className="admin__counters">
 					<span>пользователей: {totals.users}</span>
 					<span>связей: {totals.links}</span>
-					<span>приглашений ждут: {totals.pending}</span>
 				</div>
 				<div className="admin__tools">
 					<input
@@ -187,7 +185,6 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 						<th>Возраст</th>
 						<th>Пол</th>
 						<th onClick={() => toggleSort('links')}>Связей</th>
-						<th>Приглашений</th>
 						<th>Тестовый</th>
 						<th>Активен</th>
 						<th>Действия</th>
@@ -257,9 +254,6 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 								</td>
 								<td className="clickable" onClick={() => void showLinks(user.id)}>
 									{user.links}
-								</td>
-								<td>
-									{user.invitesSent} / {user.invitesAccepted}
 								</td>
 								<td>{user.isTest ? <span className="badge">тест</span> : ''}</td>
 								<td>

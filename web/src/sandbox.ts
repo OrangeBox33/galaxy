@@ -50,7 +50,6 @@ function buildGraph(): Graph {
 		me: nodes[0].id,
 		nodes,
 		edges: [],
-		pending: [],
 		dismissed: [],
 	};
 }

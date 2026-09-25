@@ -5,11 +5,10 @@ import { env } from '../env.js';
 import { log } from '../lib/log.js';
 import { randomFlame } from '../lib/flame.js';
 import { sanitizeIncoming } from '../lib/names.js';
-import { ensureInviteToken } from '../lib/inviteLink.js';
+import { ensureInviteToken, linkByToken } from '../lib/inviteLink.js';
 import { sendMessage } from '../bot/api.js';
 import { AVATAR_TTL_MS, scheduleAvatarFetch } from '../avatars/queue.js';
 import { markLayoutDirty } from '../layout/state.js';
-import { acceptInvite } from './invites.js';
 
 function secretMatches(candidate: string): boolean {
 	const a = Buffer.from(candidate);
@@ -53,7 +52,7 @@ async function welcome(from: From, token: string): Promise<void> {
 
 		await ensureInviteToken(tx, saved);
 		if (isNew) await markLayoutDirty(tx);
-		if (token) await acceptInvite(tx, saved.id, token);
+		if (token) await linkByToken(tx, saved.id, token);
 		return saved;
 	});
 

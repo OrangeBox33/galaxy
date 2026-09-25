@@ -58,19 +58,6 @@ export async function recomputeLayout(options: RecomputeOptions = {}): Promise<{
 			}
 		}
 
-		// Новый узел ставится рядом с пригласившим.
-		const anchors = new Map<bigint, bigint>();
-		const newIds = ids.filter((id) => !previous.has(id));
-		if (newIds.length > 0) {
-			const invites = await db.invite.findMany({
-				where: { acceptedById: { in: newIds }, status: 'ACCEPTED' },
-				select: { acceptedById: true, inviterId: true },
-			});
-			for (const invite of invites) {
-				if (invite.acceptedById) anchors.set(invite.acceptedById, invite.inviterId);
-			}
-		}
-
 		// Без прошлого коэффициента растяжения пересчёт начнёт с растянутого
 		// неба и перетасует звёзды по дороге.
 		const savedParams = (state?.params ?? null) as { scale?: number } | null;
@@ -83,7 +70,6 @@ export async function recomputeLayout(options: RecomputeOptions = {}): Promise<{
 			ids,
 			edges,
 			previous,
-			anchors,
 			full: options.full,
 			long: options.iterations === 'long',
 			previousScale,

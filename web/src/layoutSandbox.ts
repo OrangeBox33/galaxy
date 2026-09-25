@@ -118,7 +118,6 @@ function toGraph(layout: LayoutResult): Graph {
 		me: '0',
 		nodes,
 		edges: allEdges().map(([a, b]) => [String(a), String(b)] as [string, string]),
-		pending: [],
 		dismissed: [],
 	};
 }

@@ -3,10 +3,8 @@ import type { Gender } from '../../../shared/config';
 import { mutualFriends, neighbourMap, shortestPath } from '../../../shared/path';
 import { playLink } from '../sound';
 import { useStore } from '../store';
-import { invites } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { Avatar } from './Avatar';
-import { openShare } from '../telegram/webapp';
 
 function years(n: number) {
 	const tens = n % 100;
@@ -83,49 +81,6 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 		} finally {
 			setBusy(false);
 		}
-	}
-
-	if (selection.kind === 'invite') {
-		const invite = graph.pending.find((item) => item.id === selection.id);
-		if (!invite) return null;
-		return (
-			<div className="card">
-				<button className="card__close" onClick={close}>
-					×
-				</button>
-				<div className="card__row">
-					<div className="card__dot" />
-					<div>
-						<div className="card__name">{invite.label || 'Приглашение'}</div>
-						<div className="card__meta">
-							ждёт с {new Date(invite.createdAt).toLocaleDateString('ru-RU')}
-						</div>
-					</div>
-				</div>
-				<div className="card__actions">
-					<button
-						className="btn"
-						disabled={busy}
-						onClick={() =>
-							openShare(
-								invite.url,
-								'Открой ссылку, и рядом с моей звездой зажжётся твоя.',
-							)
-						}
-					>
-						Отправить ещё раз
-					</button>
-					<button
-						className="btn btn--ghost"
-						disabled={busy}
-						onClick={() => void run(() => invites.revoke(invite.id)).then(close)}
-					>
-						Убрать
-					</button>
-				</div>
-				{error && <div className="card__error">{error}</div>}
-			</div>
-		);
 	}
 
 	const node = graph.nodes.find((item) => item.id === selection.id);

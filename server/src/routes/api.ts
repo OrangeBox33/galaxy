@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { authRouter } from './auth.js';
 import { meRouter } from './me.js';
 import { graphRouter } from './graph.js';
-import { invitesRouter } from './invites.js';
 import { linksRouter } from './links.js';
 import { suggestionsRouter } from './suggestions.js';
 import { adminRouter } from './admin.js';
@@ -20,7 +19,6 @@ export function apiRouter(): Router {
 	router.use('/auth', authRouter());
 	router.use('/me', meRouter());
 	router.use('/graph', graphRouter());
-	router.use('/invites', invitesRouter());
 	router.use('/links', linksRouter());
 	router.use('/suggestions', suggestionsRouter());
 	router.use('/admin', adminRouter());

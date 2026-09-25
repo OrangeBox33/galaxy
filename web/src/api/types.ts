@@ -36,15 +36,6 @@ export type GraphNode = {
 	flameColor?: string | null;
 };
 
-// Одноразовые приглашения: сервер их отдаёт, но на карте они скрыты (INVITES_HIDDEN).
-export type PendingInvite = {
-	id: string;
-	token: string;
-	url: string;
-	label: string | null;
-	createdAt: string;
-};
-
 export type Graph = {
 	layoutVersion: number;
 	// Во сколько раз небо растянуто против размера, к которому сходится
@@ -53,16 +44,8 @@ export type Graph = {
 	me: string;
 	nodes: GraphNode[];
 	edges: [string, string][];
-	pending: PendingInvite[];
 	// Кому этот человек уже сказал «нет» в окне возможных друзей.
 	dismissed: string[];
-};
-
-export type CreatedInvite = {
-	id: string;
-	token: string;
-	url: string;
-	shareText: string;
 };
 
 export type AdminUser = {
@@ -77,8 +60,6 @@ export type AdminUser = {
 	isBlocked: boolean;
 	nameLockedByAdmin: boolean;
 	links: number;
-	invitesSent: number;
-	invitesAccepted: number;
 	createdAt: string;
 	lastSeenAt: string;
 };

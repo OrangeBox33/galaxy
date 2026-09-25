@@ -16,12 +16,6 @@ enum Gender {
   UNSPECIFIED
 }
 
-enum InviteStatus {
-  PENDING
-  ACCEPTED
-  REVOKED
-}
-
 enum OutboxStatus {
   QUEUED
   SENT
@@ -61,9 +55,8 @@ model User {
   isTest    Boolean @default(false)
   isBlocked Boolean @default(false) // не пускаем в приложение, звезда гаснет
 
-  // Постоянная личная ссылка-приглашение: одна на человека, навсегда.
-  // Каждый, кто по ней придёт, сразу получает связь с хозяином ссылки —
-  // в отличие от одноразовых Invite, которые сгорали на первом же госте.
+  // Постоянная личная ссылка: одна на человека, навсегда. Каждый, кто по ней
+  // придёт, сразу получает связь с хозяином ссылки.
   // Nullable только ради старых строк: заполняется при первом же входе.
   inviteToken String? @unique
 
@@ -76,10 +69,8 @@ model User {
   createdAt  DateTime @default(now())
   lastSeenAt DateTime @default(now())
 
-  linksA          Link[]   @relation("LinkA")
-  linksB          Link[]   @relation("LinkB")
-  invitesSent     Invite[] @relation("Inviter")
-  invitesAccepted Invite[] @relation("Acceptor")
+  linksA Link[] @relation("LinkA")
+  linksB Link[] @relation("LinkB")
 
   dismissalsMade SuggestionDismissal[] @relation("DismissalOwner")
   dismissedBy    SuggestionDismissal[] @relation("DismissalTarget")
@@ -116,28 +107,12 @@ model SuggestionDismissal {
   @@index([userId])
 }
 
-// Приглашение = «тусклая точка». Видна ТОЛЬКО пригласившему.
-model Invite {
-  id           String       @id @default(cuid())
-  token        String       @unique // 22 символа base64url из 16 случайных байт
-  inviterId    BigInt
-  inviter      User         @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
-  label        String? // как пригласивший подписал точку: «Вася с работы»
-  status       InviteStatus @default(PENDING)
-  acceptedById BigInt?
-  acceptedBy   User?        @relation("Acceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime     @default(now())
-  acceptedAt   DateTime?
-
-  @@index([inviterId, status])
-}
-
 // Исходящие сообщения бота. Нужен, потому что отправка может упасть
 // (пользователь не начинал диалог с ботом или заблокировал его).
 model BotOutbox {
   id        String       @id @default(cuid())
   userId    BigInt
-  kind      String // "invite_accepted" | "linked"
+  kind      String // "by_link" | "linked"
   text      String
   status    OutboxStatus @default(QUEUED)
   attempts  Int          @default(0)

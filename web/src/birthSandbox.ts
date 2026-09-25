@@ -93,7 +93,6 @@ function build(): Graph {
 		me: newborn,
 		nodes,
 		edges: edges.map(([a, b]) => [String(a), String(b)] as [string, string]),
-		pending: [],
 		dismissed: [],
 	};
 }
