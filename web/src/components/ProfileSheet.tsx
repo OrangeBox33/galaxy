@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { AGE_MAX, AGE_MIN, type Gender } from '../../../shared/config';
+import {
+	AGE_MAX,
+	AGE_MIN,
+	DEFAULT_CORE_COLOR,
+	DEFAULT_FLAME_COLOR,
+	STAR_COLORS,
+	type Gender,
+} from '../../../shared/config';
 import { me as meApi } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { useStore } from '../store';
@@ -11,30 +18,62 @@ const GENDER_LABELS: { value: Gender; label: string }[] = [
 	{ value: 'UNSPECIFIED', label: 'Не указывать' },
 ];
 
-export function ProfileSheet({ onClose }: { onClose: () => void }) {
+// Три наполнения: знакомство до рождения звезды, выбор цветов сразу после него
+// и полный профиль по нажатию на свою звезду.
+export type ProfileVariant = 'intro' | 'colors' | 'full';
+
+export function ProfileSheet({
+	variant = 'full',
+	onClose,
+}: {
+	variant?: ProfileVariant;
+	onClose: () => void;
+}) {
 	const profile = useStore((state) => state.profile);
 	const setProfile = useStore((state) => state.setProfile);
 	const refreshGraph = useStore((state) => state.refreshGraph);
+	const previewColors = useStore((state) => state.previewColors);
 
 	const [name, setName] = useState(profile?.name ?? '');
 	const [age, setAge] = useState(profile?.age === null ? '' : String(profile?.age ?? ''));
 	const [gender, setGender] = useState<Gender>(profile?.gender ?? 'UNSPECIFIED');
+	const [coreColor, setCoreColor] = useState(profile?.coreColor ?? DEFAULT_CORE_COLOR);
+	const [flameColor, setFlameColor] = useState(profile?.flameColor ?? DEFAULT_FLAME_COLOR);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 
 	if (!profile) return null;
+	const withColors = variant !== 'intro';
+	const withFields = variant !== 'colors';
+
+	// Небо красится сразу, до сохранения: цвет выбирают, глядя на свою звезду.
+	function pickCore(color: string): void {
+		setCoreColor(color);
+		previewColors({ core: color, flame: flameColor });
+	}
+
+	function pickFlame(color: string): void {
+		setFlameColor(color);
+		previewColors({ core: coreColor, flame: color });
+	}
 
 	async function save(): Promise<void> {
 		setBusy(true);
 		setError(null);
 		try {
 			const updated = await meApi.update({
-				...(profile!.nameLockedByAdmin ? {} : { displayName: name.trim() }),
-				age: age.trim() === '' ? null : Number(age),
-				gender,
+				...(withFields
+					? {
+							...(profile!.nameLockedByAdmin ? {} : { displayName: name.trim() }),
+							age: age.trim() === '' ? null : Number(age),
+							gender,
+						}
+					: {}),
+				...(withColors ? { coreColor, flameColor } : {}),
 			});
 			setProfile(updated);
+			previewColors(null);
 			await refreshGraph();
 			onClose();
 		} catch (err) {
@@ -53,6 +92,31 @@ export function ProfileSheet({ onClose }: { onClose: () => void }) {
 			setError('Не удалось удалить профиль');
 			setBusy(false);
 		}
+	}
+
+	// Окно цветов не закрывает небо: звезда должна быть видна, пока её красят.
+	if (variant === 'colors') {
+		return (
+			<div className="sheet sheet--bare">
+				<div className="sheet__body">
+					<h2>Цвет вашей звезды</h2>
+					<div className="field">
+						<span>Сердцевина</span>
+						<Palette value={coreColor} onPick={pickCore} />
+					</div>
+					<div className="field">
+						<span>Пламя</span>
+						<Palette value={flameColor} onPick={pickFlame} />
+					</div>
+					{error && <div className="sheet__error">{error}</div>}
+					<div className="sheet__actions">
+						<button className="btn" disabled={busy} onClick={() => void save()}>
+							Сохранить
+						</button>
+					</div>
+				</div>
+			</div>
+		);
 	}
 
 	return (
@@ -110,6 +174,20 @@ export function ProfileSheet({ onClose }: { onClose: () => void }) {
 					<small>Пол даёт звезде лёгкий оттенок — тёплый или холодный.</small>
 				</div>
 
+				{withColors && (
+					<>
+						<div className="field">
+							<span>Цвет сердцевины</span>
+							<Palette value={coreColor} onPick={pickCore} />
+						</div>
+						<div className="field">
+							<span>Цвет пламени</span>
+							<Palette value={flameColor} onPick={pickFlame} />
+							<small>Кромка ядра остаётся белой у всех — по ней звезда и читается.</small>
+						</div>
+					</>
+				)}
+
 				{error && <div className="sheet__error">{error}</div>}
 
 				<div className="sheet__actions">
@@ -121,24 +199,42 @@ export function ProfileSheet({ onClose }: { onClose: () => void }) {
 					</button>
 				</div>
 
-				<div className="sheet__danger">
-					{confirmDelete ? (
-						<>
-							<span>Удалить профиль вместе со всеми связями?</span>
-							<button className="btn btn--danger" disabled={busy} onClick={() => void remove()}>
-								Да, удалить
+				{withColors && (
+					<div className="sheet__danger">
+						{confirmDelete ? (
+							<>
+								<span>Удалить профиль вместе со всеми связями?</span>
+								<button className="btn btn--danger" disabled={busy} onClick={() => void remove()}>
+									Да, удалить
+								</button>
+								<button className="btn btn--ghost" onClick={() => setConfirmDelete(false)}>
+									Отмена
+								</button>
+							</>
+						) : (
+							<button className="btn btn--quiet" onClick={() => setConfirmDelete(true)}>
+								Удалить мой профиль
 							</button>
-							<button className="btn btn--ghost" onClick={() => setConfirmDelete(false)}>
-								Отмена
-							</button>
-						</>
-					) : (
-						<button className="btn btn--quiet" onClick={() => setConfirmDelete(true)}>
-							Удалить мой профиль
-						</button>
-					)}
-				</div>
+						)}
+					</div>
+				)}
 			</div>
+		</div>
+	);
+}
+
+function Palette({ value, onPick }: { value: string; onPick: (color: string) => void }) {
+	return (
+		<div className="palette">
+			{STAR_COLORS.map((color) => (
+				<button
+					key={color}
+					className={color === value ? 'palette__dot is-active' : 'palette__dot'}
+					style={{ background: color }}
+					title={color}
+					onClick={() => onPick(color)}
+				/>
+			))}
 		</div>
 	);
 }

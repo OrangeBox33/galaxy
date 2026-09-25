@@ -1,5 +1,5 @@
 import type { Graph, GraphNode, PendingInvite } from '../api/types';
-import { haloColor, type RGB } from './palette';
+import { haloColor, parseHex, type RGB } from './palette';
 import { randomFor } from './prng';
 // Радиус — из общего кода: им же раскладка разводит звёзды, чтобы не налезали друг на друга.
 import { starRadius } from '../../../shared/layout/params';
@@ -30,7 +30,8 @@ export type Star = {
 
 	radius: number;
 	flame: number;
-	halo: RGB;
+	halo: RGB; // языки пламени и ореол за кромкой диска
+	core: RGB; // середина диска
 
 	depth: number;
 
@@ -75,8 +76,17 @@ export function emptyScene(): Scene {
 	};
 }
 
+// Личные цвета человека; у заблокированного своя серость, она их перебивает.
+function colorsOf(node: GraphNode): { halo: RGB; core: RGB } {
+	const base = haloColor(node.gender, node.isBlocked);
+	if (node.isBlocked) return { halo: base, core: base };
+	const halo = parseHex(node.flameColor) ?? base;
+	return { halo, core: parseHex(node.coreColor) ?? halo };
+}
+
 function makeStar(node: GraphNode, now: number, isNew: boolean): Star {
 	const random = randomFor(node.id);
+	const colors = colorsOf(node);
 	return {
 		id: node.id,
 		node,
@@ -92,7 +102,8 @@ function makeStar(node: GraphNode, now: number, isNew: boolean): Star {
 		phaseX: random() * Math.PI * 2,
 		phaseY: random() * Math.PI * 2,
 		twinklePhase: random() * Math.PI * 2,
-		halo: haloColor(node.gender, node.isBlocked),
+		halo: colors.halo,
+		core: colors.core,
 		depth: (random() * 2 - 1) * (1 - 0.4 * node.centrality),
 		ox: 0,
 		oy: 0,
@@ -117,7 +128,6 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 		existing.node = node;
 		existing.radius = starRadius(node.degree);
 		existing.flame = node.flame;
-		existing.halo = haloColor(node.gender, node.isBlocked);
 
 		// Сравниваем координаты, а не версию: предсказанные места приходят с прежней версией.
 		if (existing.toX !== node.x || existing.toY !== node.y) {
@@ -132,7 +142,9 @@ export function syncScene(scene: Scene, graph: Graph, now: number): Scene {
 	}
 
 	for (const star of stars.values()) {
-		star.halo = haloColor(star.node.gender, star.node.isBlocked);
+		const colors = colorsOf(star.node);
+		star.halo = colors.halo;
+		star.core = colors.core;
 	}
 
 	const edges: [Star, Star][] = [];

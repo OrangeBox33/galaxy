@@ -13,13 +13,14 @@ const range = (key: string, label: string, min: number, max: number, step: numbe
 
 const FLAME_FIELDS: Field[] = [
 	range('tongues', 'сколько языков (множитель)', 0.55, 1, 0.05),
-	range('from', 'начало от центра', 0, 2, 0.01),
-	range('length', 'длина', 0.01, 8, 0.01),
-	range('width', 'ширина', 0.02, 2, 0.01),
+	range('from', 'начало от центра (коэффициент)', 0, 2, 0.01),
+	range('length', 'длина языков (коэффициент)', 0, 2, 0.01),
+	range('width', 'ширина языков (коэффициент)', 0, 2, 0.01),
 	range('taper', 'пузатость', 0, 1, 0.01),
 	range('sweep', 'подворот', -1.2, 1.2, 0.01),
 	range('bow', 'где изгиб', 0, 1, 0.01),
 	range('alpha', 'яркость', 0, 1, 0.01),
+	range('tint', 'цвет языков (0 — белые)', 0, 1, 0.01),
 	range('plateau', 'докуда держит яркость', 0.02, 0.98, 0.01),
 	range('flicker', 'мерцание длины', 0, 1, 0.01),
 	range('flickerSpeed', 'секунд на мерцание', 0.2, 12, 0.1),
@@ -43,12 +44,21 @@ const CORE_FIELDS: Field[] = [
 
 const SKY_FIELDS: Field[] = [range('dustAlpha', 'пыль (выше 1 — гуще)', 0, 4, 0.05)];
 
+const COLORS_KEY = 'galaxy:sandbox-colors';
+
+// Цвета звезды для стенда: настоящие поля coreColor и flameColor, только не из базы.
+export const sandboxColors = { core: '#FFFFFF', flame: '#FFFFFF' };
+
 const STORAGE_KEY = 'galaxy:sandbox-tuning-2';
 
 type Bag = Record<string, unknown>;
 
-export function createPanel(): void {
+export function createPanel(onColors?: () => void): void {
+	// Снимок до восстановления: «Сброс» возвращает к тому, что записано в коде,
+	// а не к тому, что лежит в браузере с прошлого раза.
+	const defaults = snapshot();
 	restore();
+	restoreColors();
 
 	const style = document.createElement('style');
 	style.textContent = `
@@ -59,8 +69,12 @@ export function createPanel(): void {
 		.tune.hidden .tune__body { display: none; }
 		.tune h2 { font-size: 12px; margin: 14px 0 6px; color: #8fa3c8; text-transform: uppercase;
 			letter-spacing: 0.08em; }
-		.tune__row { display: grid; grid-template-columns: 1fr 48px; gap: 6px; align-items: center;
+		.tune__row { display: grid; grid-template-columns: 1fr 48px 18px; gap: 6px; align-items: center;
 			margin: 3px 0; }
+		.tune__row.color { grid-template-columns: 1fr 64px; }
+		.tune .tune__reset { border: 0; background: none; color: #58678a; cursor: pointer; padding: 0;
+			font-size: 13px; line-height: 1; }
+		.tune .tune__reset:hover { color: #9fb3d8; }
 		.tune__row label { color: #b6c4e0; }
 		.tune__row input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; }
 		.tune__row .value { text-align: right; color: #7fe0c0; font-variant-numeric: tabular-nums; }
@@ -92,9 +106,12 @@ export function createPanel(): void {
 	body.className = 'tune__body';
 	panel.append(body);
 
-	body.append(section('Языки пламени', FLAME_FIELDS, tuning.flame as unknown as Bag));
-	body.append(section('Ядро', CORE_FIELDS, tuning as unknown as Bag));
-	body.append(section('Небо', SKY_FIELDS, tuning as unknown as Bag));
+	body.append(colorsSection(onColors));
+	body.append(
+		section('Языки пламени', FLAME_FIELDS, tuning.flame as unknown as Bag, defaults.flame as Bag),
+	);
+	body.append(section('Ядро', CORE_FIELDS, tuning as unknown as Bag, defaults));
+	body.append(section('Небо', SKY_FIELDS, tuning as unknown as Bag, defaults));
 
 	const out = document.createElement('textarea');
 	out.className = 'tune__out';
@@ -129,16 +146,54 @@ export function createPanel(): void {
 	document.body.append(panel);
 }
 
-function section(title: string, fields: Field[], bag: Bag): HTMLElement {
+function colorsSection(onColors?: () => void): HTMLElement {
+	const box = document.createElement('div');
+	const heading = document.createElement('h2');
+	heading.textContent = 'Цвета звезды';
+	box.append(heading);
+
+	for (const [key, label] of [
+		['core', 'диск'],
+		['flame', 'языки пламени'],
+	] as const) {
+		const line = document.createElement('div');
+		line.className = 'tune__row color';
+		const caption = document.createElement('label');
+		caption.textContent = label;
+		const input = document.createElement('input');
+		input.type = 'color';
+		input.value = sandboxColors[key];
+		input.oninput = () => {
+			sandboxColors[key] = input.value;
+			localStorage.setItem(COLORS_KEY, JSON.stringify(sandboxColors));
+			onColors?.();
+		};
+		line.append(caption, input);
+		box.append(line);
+	}
+	return box;
+}
+
+function restoreColors(): void {
+	const raw = localStorage.getItem(COLORS_KEY);
+	if (!raw) return;
+	try {
+		Object.assign(sandboxColors, JSON.parse(raw) as typeof sandboxColors);
+	} catch {
+		localStorage.removeItem(COLORS_KEY);
+	}
+}
+
+function section(title: string, fields: Field[], bag: Bag, defaults: Bag): HTMLElement {
 	const box = document.createElement('div');
 	const heading = document.createElement('h2');
 	heading.textContent = title;
 	box.append(heading);
-	for (const field of fields) box.append(row(field, bag));
+	for (const field of fields) box.append(row(field, bag, defaults[field.key]));
 	return box;
 }
 
-function row(field: Field, bag: Bag): HTMLElement {
+function row(field: Field, bag: Bag, fallback: unknown): HTMLElement {
 	const line = document.createElement('div');
 	line.className = 'tune__row';
 
@@ -147,14 +202,29 @@ function row(field: Field, bag: Bag): HTMLElement {
 
 	const value = document.createElement('span');
 	value.className = 'value';
-	value.textContent = String(bag[field.key]);
 
 	const input = document.createElement('input');
 	input.type = 'range';
 	input.min = String(field.min);
 	input.max = String(field.max);
 	input.step = String(field.step);
-	input.value = String(bag[field.key]);
+
+	const show = (): void => {
+		input.value = String(bag[field.key]);
+		value.textContent = String(bag[field.key]);
+	};
+	show();
+
+	const reset = document.createElement('button');
+	reset.className = 'tune__reset';
+	reset.textContent = '↺';
+	reset.title = `Вернуть ${fallback}`;
+	reset.onclick = () => {
+		bag[field.key] = fallback as number;
+		show();
+		save();
+	};
+
 	input.oninput = () => {
 		const next = Number(input.value);
 		bag[field.key] = next;
@@ -162,7 +232,7 @@ function row(field: Field, bag: Bag): HTMLElement {
 		save();
 	};
 
-	line.append(label, value, input);
+	line.append(label, value, reset, input);
 	return line;
 }
 

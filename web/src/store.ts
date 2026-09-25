@@ -23,6 +23,10 @@ type State = {
 
 	prediction: { version: number; nodes: Prediction } | null;
 
+	// Цвета, выбранные в окне, но ещё не сохранённые: небо показывает их сразу,
+	// иначе выбирать цвет не по чему.
+	colorPreview: { core: string; flame: string } | null;
+
 	// Отказы этого сеанса: сервер вернёт их лишь следующим опросом, а карточка уходит сразу.
 	dismissedLocal: string[];
 
@@ -32,9 +36,21 @@ type State = {
 	linkWith: (targetId: string) => Promise<void>;
 	dismissSuggestion: (targetId: string) => Promise<void>;
 	unlinkFrom: (targetId: string) => Promise<void>;
+	previewColors: (colors: { core: string; flame: string } | null) => void;
 	select: (selection: Selection) => void;
 	hover: (id: string | null) => void;
 };
+
+function applyColors(graph: Graph, colors: { core: string; flame: string }): Graph {
+	return {
+		...graph,
+		nodes: graph.nodes.map((node) =>
+			node.id === graph.me
+				? { ...node, coreColor: colors.core, flameColor: colors.flame }
+				: node,
+		),
+	};
+}
 
 function applyPrediction(graph: Graph, prediction: Prediction): Graph {
 	return {
@@ -104,6 +120,7 @@ export const useStore = create<State>((set, get) => {
 		hovered: null,
 		error: null,
 		prediction: null,
+		colorPreview: null,
 		dismissedLocal: [],
 
 		setProfile: (profile) => set({ profile }),
@@ -114,7 +131,9 @@ export const useStore = create<State>((set, get) => {
 
 		refreshGraph: async () => {
 			try {
-				const fresh = await graphApi.get();
+				const colors = get().colorPreview;
+				const server = await graphApi.get();
+				const fresh = colors ? applyColors(server, colors) : server;
 				const prediction = get().prediction;
 
 				if (prediction && fresh.layoutVersion <= prediction.version) {
@@ -168,6 +187,11 @@ export const useStore = create<State>((set, get) => {
 				}),
 				() => linksApi.remove(targetId),
 			);
+		},
+
+		previewColors: (colors) => {
+			const graph = get().graph;
+			set({ colorPreview: colors, graph: graph && colors ? applyColors(graph, colors) : graph });
 		},
 
 		select: (selection) => set({ selection }),

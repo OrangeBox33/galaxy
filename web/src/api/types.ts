@@ -9,7 +9,10 @@ export type Profile = {
 	isAdmin: boolean;
 	isTest: boolean;
 	nameLockedByAdmin: boolean;
-	needsProfileSetup: boolean;
+	// Первый вход: окно профиля, затем рождение звезды.
+	needsBirth: boolean;
+	coreColor: string | null;
+	flameColor: string | null;
 	// Одна на человека и не сгорает.
 	inviteUrl: string | null;
 	shareText: string;
@@ -28,6 +31,9 @@ export type GraphNode = {
 	avatar: string | null;
 	isTest: boolean;
 	isBlocked: boolean;
+	// Личные цвета: диск и языки. Кромка диска всегда белая.
+	coreColor?: string | null;
+	flameColor?: string | null;
 };
 
 // Одноразовые приглашения: сервер их отдаёт, но на карте они скрыты (INVITES_HIDDEN).

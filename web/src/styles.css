@@ -699,3 +699,35 @@ button {
 		animation: none;
 	}
 }
+
+.palette {
+	display: grid;
+	grid-template-columns: repeat(8, 1fr);
+	gap: 8px;
+}
+
+.palette__dot {
+	aspect-ratio: 1;
+	border-radius: 50%;
+	border: 1px solid rgba(8, 12, 24, 0.5);
+	cursor: pointer;
+	padding: 0;
+}
+
+.palette__dot.is-active {
+	box-shadow:
+		0 0 0 2px var(--sky, #04060e),
+		0 0 0 4px rgba(233, 240, 255, 0.9);
+}
+
+/* Окно выбора цвета: без затемнения и по высоте содержимого — звезду красят,
+   глядя на неё же, значит небо должно остаться видимым и живым. */
+.sheet--bare {
+	background: none;
+	backdrop-filter: none;
+	pointer-events: none;
+}
+
+.sheet--bare .sheet__body {
+	pointer-events: auto;
+}

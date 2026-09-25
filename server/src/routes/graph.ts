@@ -47,6 +47,8 @@ export function graphRouter(): Router {
 					x: user.x,
 					y: user.y,
 					avatar: user.avatarFile,
+					coreColor: user.coreColor,
+					flameColor: user.flameColor,
 					isTest: user.isTest,
 					isBlocked: user.isBlocked,
 				})),

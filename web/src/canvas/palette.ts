@@ -26,6 +26,15 @@ export function haloColor(gender: Gender, isBlocked: boolean): RGB {
 	return isBlocked ? BLOCKED : STAR_WHITE;
 }
 
+// "#RRGGBB" из личных настроек человека; мусор игнорируем, цвет останется прежним.
+export function parseHex(value: string | null | undefined): RGB | null {
+	if (!value) return null;
+	const match = /^#?([0-9a-f]{6})$/i.exec(value.trim());
+	if (!match) return null;
+	const number = parseInt(match[1], 16);
+	return [(number >> 16) & 255, (number >> 8) & 255, number & 255];
+}
+
 export function rgba(color: RGB, alpha: number): string {
 	return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
 }

@@ -9,8 +9,16 @@ export const auth = {
 
 export const me = {
 	get: () => api.get<Profile>('/me'),
-	update: (patch: { displayName?: string; age?: number | null; gender?: Gender }) =>
-		api.patch<Profile>('/me', patch),
+	update: (patch: {
+		displayName?: string;
+		age?: number | null;
+		gender?: Gender;
+		coreColor?: string | null;
+		flameColor?: string | null;
+	}) => api.patch<Profile>('/me', patch),
+	// Место для звезды, которой ещё нет на небе; повторный вызов вернёт то же.
+	birth: () => api.post<{ x: number; y: number }>('/me/birth'),
+	born: () => api.post<Profile>('/me/born'),
 	remove: () => api.del<void>('/me'),
 };
 

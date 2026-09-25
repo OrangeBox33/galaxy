@@ -5,7 +5,16 @@ export type Bag = Record<string, number | boolean>;
 export type Control =
 	| { kind: 'range'; key: string; label: string; min: number; max: number; step: number }
 	| { kind: 'toggle'; key: string; label: string }
-	| { kind: 'button'; label: string; run: () => void };
+	| { kind: 'button'; label: string; run: () => void }
+	// Значение живёт не в Bag: цвет — строка, а выбор варианта — ключ.
+	| { kind: 'color'; label: string; get: () => string; set: (value: string) => void }
+	| {
+			kind: 'choice';
+			label: string;
+			options: { key: string; label: string }[];
+			get: () => string;
+			set: (value: string) => void;
+	  };
 
 export type Section = { title: string; bag: Bag; controls: Control[] };
 
@@ -25,6 +34,9 @@ export type Panel = {
 };
 
 export function createLayoutPanel(options: PanelOptions): Panel {
+	// Снимок до восстановления: «Сброс» у ползунка возвращает к тому, что
+	// записано в коде, а не к оставшемуся в браузере с прошлого раза.
+	const defaults = new Map(options.sections.map((section) => [section, { ...section.bag }]));
 	restore(options);
 
 	const style = document.createElement('style');
@@ -63,7 +75,7 @@ export function createLayoutPanel(options: PanelOptions): Panel {
 		heading.textContent = section.title;
 		box.append(heading);
 		for (const control of section.controls) {
-			const [element, refresh] = row(control, section.bag, () => {
+			const [element, refresh] = row(control, section.bag, defaults.get(section) ?? {}, () => {
 				save(options);
 				options.onChange();
 			});
@@ -111,7 +123,12 @@ export function createLayoutPanel(options: PanelOptions): Panel {
 	};
 }
 
-function row(control: Control, bag: Bag, changed: () => void): [HTMLElement, (() => void) | null] {
+function row(
+	control: Control,
+	bag: Bag,
+	defaults: Bag,
+	changed: () => void,
+): [HTMLElement, (() => void) | null] {
 	if (control.kind === 'button') {
 		const line = document.createElement('div');
 		line.className = 'lay__row act';
@@ -120,6 +137,49 @@ function row(control: Control, bag: Bag, changed: () => void): [HTMLElement, (()
 		button.onclick = control.run;
 		line.append(button);
 		return [line, null];
+	}
+
+	if (control.kind === 'color') {
+		const line = document.createElement('div');
+		line.className = 'lay__row color';
+		const label = document.createElement('label');
+		label.textContent = control.label;
+		const input = document.createElement('input');
+		input.type = 'color';
+		input.value = control.get();
+		input.oninput = () => {
+			control.set(input.value);
+			changed();
+		};
+		line.append(label, input);
+		return [line, () => (input.value = control.get())];
+	}
+
+	if (control.kind === 'choice') {
+		const line = document.createElement('div');
+		line.className = 'lay__row choice';
+		const label = document.createElement('label');
+		label.textContent = control.label;
+		const box = document.createElement('div');
+		box.className = 'lay__pills';
+		const buttons = control.options.map((option) => {
+			const button = document.createElement('button');
+			button.textContent = option.label;
+			button.onclick = () => {
+				control.set(option.key);
+				sync();
+				changed();
+			};
+			box.append(button);
+			return [option.key, button] as const;
+		});
+		const sync = (): void => {
+			const current = control.get();
+			for (const [key, button] of buttons) button.classList.toggle('on', key === current);
+		};
+		sync();
+		line.append(label, box);
+		return [line, sync];
 	}
 
 	if (control.kind === 'toggle') {
@@ -167,7 +227,17 @@ function row(control: Control, bag: Bag, changed: () => void): [HTMLElement, (()
 		changed();
 	};
 
-	line.append(label, value, input);
+	const reset = document.createElement('button');
+	reset.className = 'lay__reset';
+	reset.textContent = '↺';
+	reset.title = `Вернуть ${defaults[control.key]}`;
+	reset.onclick = () => {
+		bag[control.key] = defaults[control.key];
+		show();
+		changed();
+	};
+
+	line.append(label, value, reset, input);
 	return [line, show];
 }
 
@@ -208,14 +278,24 @@ const CSS = `
 	.lay__status { margin: 6px 0 2px; color: #7fe0c0; font-variant-numeric: tabular-nums; }
 	.lay h2 { font-size: 12px; margin: 14px 0 6px; color: #8fa3c8; text-transform: uppercase;
 		letter-spacing: 0.08em; }
-	.lay__row { display: grid; grid-template-columns: 1fr 52px; gap: 6px; align-items: center;
+	.lay__row { display: grid; grid-template-columns: 1fr 52px 18px; gap: 6px; align-items: center;
 		margin: 3px 0; }
+	.lay .lay__reset { border: 0; background: none; color: #58678a; cursor: pointer; padding: 0;
+		font-size: 13px; line-height: 1; flex: none; }
+	.lay .lay__reset:hover { color: #9fb3d8; }
 	.lay__row label { color: #b6c4e0; }
 	.lay__row input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; }
 	.lay__row .value { text-align: right; color: #7fe0c0; font-variant-numeric: tabular-nums; }
 	.lay__row.flag { grid-template-columns: 18px 1fr; }
 	.lay__row.flag label { cursor: pointer; }
 	.lay__row.act { grid-template-columns: 1fr; margin: 6px 0; }
+	.lay__row.color { grid-template-columns: 1fr 60px; }
+	.lay__row.color input[type=color] { width: 100%; height: 22px; padding: 0; border: 0;
+		background: none; }
+	.lay__row.choice { grid-template-columns: 1fr; }
+	.lay__pills { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+	.lay__pills button { flex: 1 1 auto; padding: 5px 7px; }
+	.lay__pills button.on { background: #24406b; border-color: #3d6ea8; color: #eaf2ff; }
 	.lay__buttons { display: flex; gap: 6px; margin: 16px 0 0; padding: 8px 0; }
 	.lay button { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid #2a3652;
 		background: #141c30; color: #dbe4f7; cursor: pointer; font: inherit; }

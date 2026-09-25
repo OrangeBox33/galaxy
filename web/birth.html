@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>Galaxy — песочница рождения звезды</title>
+	</head>
+	<body>
+		<!--
+			Песочница рождения: настоящий рендерер и настоящая раскладка на
+			выдуманном графе, без сервера, базы и Telegram. Открывается на
+			http://localhost:3006/galaxy/birth.html (npm run dev в web/).
+			В сборку не попадает: vite собирает только index.html.
+		-->
+		<div id="root" class="sky"><canvas id="sky" class="sky__canvas"></canvas></div>
+		<script type="module" src="/src/birthSandbox.ts"></script>
+	</body>
+</html>

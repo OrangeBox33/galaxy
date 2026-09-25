@@ -2,7 +2,9 @@ import { approach, easeInOutCubic } from './animate';
 
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
-const MAX_ZOOM = 4;
+// Потолок приближения: на нём же рождается звезда, поэтому он про «разглядеть
+// одну звезду», а не «увидеть компанию».
+const MAX_ZOOM = 12;
 
 // Во сколько раз можно отъехать дальше, чем «всё небо в экране»: ближе к единице
 // небо упирается в края и отъехать некуда.

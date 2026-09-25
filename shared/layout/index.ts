@@ -4,7 +4,7 @@
 import { computeCentrality } from './centrality.js';
 import { findClusters } from './clusters.js';
 import { centerByMass, percentileScale } from './normalize.js';
-import { resolveParams, type LayoutOverrides, type LayoutParams } from './params.js';
+import { resolveParams, starRadius, type LayoutOverrides, type LayoutParams } from './params.js';
 import { applyTransform, bestTransform, type Pair } from './procrustes.js';
 import {
 	buildNeighbours,
@@ -230,6 +230,28 @@ function freeSpot(
 		}
 	}
 	return best ?? { x: centre.x + step, y: centre.y };
+}
+
+// Куда сядет звезда, которой на небе ещё не было, — сразу в координатах готовой
+// раскладки. Нужна серверу: место выдаётся при первом входе, до ближайшего
+// пересчёта, иначе новичок висел бы в нуле — в самой гуще неба. Масштаб здесь
+// единичный: радиусы звёзд и R_MAX заданы в тех же растянутых единицах, в
+// которых лежат координаты в базе.
+export function placeNewStar(input: {
+	id: bigint;
+	degree: number;
+	anchor?: Point;
+	taken: { x: number; y: number; degree: number }[];
+	params?: LayoutOverrides;
+}): Point {
+	const P = resolveParams(input.params);
+	const node = makeNode(input.id, input.degree, 0);
+	const taken = input.taken.map((star) => ({
+		x: star.x,
+		y: star.y,
+		radius: starRadius(star.degree),
+	}));
+	return freeSpot(node, input.anchor, taken, P, 1);
 }
 
 // Порядок обхода — по id, чтобы выбор не зависел от порядка рёбер в базе.

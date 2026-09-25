@@ -109,19 +109,15 @@ export function resolveParams(overrides?: LayoutOverrides): LayoutParams {
 	return { ...LAYOUT_PARAMS, ...overrides };
 }
 
-// Видимый радиус звезды (раздел 8.2). Формула одна на раскладку и на клиент:
-// раскладка разводит звёзды по этому же радиусу, иначе крупные перекроют соседей.
-// От 1 до 50 связей радиус растёт в 4.5 раза, выше RADIUS_KNEE рост придавлен.
+// Видимый радиус звезды. Формула одна на раскладку и на клиент: раскладка
+// разводит звёзды по этому же радиусу, иначе крупные перекроют соседей.
+// Ровно растёт площадь, а не радиус: звезда на две связи вдвое площадью больше
+// звезды на одну, на сто пятьдесят — в полтораста раз. Поэтому радиус — корень
+// квадратный: 1 связь — 4.0, 50 — 28.3, 150 — 49.0.
 const RADIUS_AT_ONE = 4.0;
-const RADIUS_POWER = 0.4644; // 1 связь → радиус 4.0, 50 связей → 18.0
-const RADIUS_KNEE = 70;
-const RADIUS_TAIL = 0.3;
-const RADIUS_SCALE = RADIUS_AT_ONE / 2 ** RADIUS_POWER;
+const LONER_AREA = 0.5; // у звезды без связей — половина площади однодружной
 
 export function starRadius(degree: number): number {
 	const links = Math.max(0, degree);
-	const full = RADIUS_SCALE * (1 + Math.min(links, RADIUS_KNEE)) ** RADIUS_POWER;
-	if (links <= RADIUS_KNEE) return full;
-	const tail = RADIUS_SCALE * (1 + links) ** RADIUS_POWER - full;
-	return full + tail * RADIUS_TAIL;
+	return RADIUS_AT_ONE * Math.sqrt(links < 1 ? LONER_AREA : links);
 }

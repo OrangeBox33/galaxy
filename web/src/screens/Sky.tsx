@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { GRAPH_POLL_MS } from '../../../shared/config';
+import { me as meApi } from '../api/endpoints';
 import { useStore } from '../store';
 import { EDGES_HIDDEN, createRenderer, type EdgeMode, type Renderer } from '../canvas/renderer';
 import { StarCard } from '../components/StarCard';
@@ -8,9 +9,19 @@ import { InviteSheet } from '../components/InviteSheet';
 import { Suggestions } from '../components/Suggestions';
 import { haptic } from '../telegram/webapp';
 
+// Подобрано в песочнице рождения (web/birth.html). Ближе камеры нет: потолок
+// зума задан в camera.ts, туда и упираемся.
+const BIRTH_FLY_MS = 900;
+const BIRTH_PAUSE_MS = 250;
+// Окно цветов занимает низ экрана: поднимаем звезду над ним, иначе красить
+// будет нечего — она окажется ровно на кромке панели.
+const COLORS_SHIFT = 0.22;
+
 export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const rendererRef = useRef<Renderer | null>(null);
+	const spotRef = useRef<Promise<{ x: number; y: number }> | null>(null);
+	const unbornRef = useRef<string | null>(null);
 
 	const profile = useStore((state) => state.profile);
 	const graph = useStore((state) => state.graph);
@@ -18,16 +29,56 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 	const select = useStore((state) => state.select);
 	const hover = useStore((state) => state.hover);
 	const refreshGraph = useStore((state) => state.refreshGraph);
+	const refreshProfile = useStore((state) => state.refreshProfile);
 
-	const [showProfile, setShowProfile] = useState(false);
+	// Первый вход идёт по шагам: знакомство → рождение звезды → цвета.
+	const [sheet, setSheet] = useState<'none' | 'intro' | 'colors' | 'profile'>('none');
+	// Кого прячем до рождения. Состоянием, а не вызовом рендерера на месте:
+	// эффект первого входа отрабатывает раньше, чем канва успевает появиться.
+	const [unborn, setUnborn] = useState<string | null>(null);
 	const [showInvite, setShowInvite] = useState(false);
 	const [edgeMode, setEdgeMode] = useState<EdgeMode>(
 		() => (localStorage.getItem('galaxy:edges') as EdgeMode | null) ?? 'glow',
 	);
 
 	useEffect(() => {
-		if (profile?.needsProfileSetup) setShowProfile(true);
-	}, [profile?.needsProfileSetup]);
+		if (!profile?.needsBirth) return;
+		// Своя звезда не должна показаться раньше собственного рождения.
+		setUnborn(profile.id);
+		// Место просим сразу: сервер ищет его вместе с пересчётом раскладки, и эта
+		// секунда-две проходит, пока человек заполняет профиль.
+		spotRef.current = meApi.birth();
+		setSheet('intro');
+	}, [profile?.needsBirth, profile?.id]);
+
+	async function birth(): Promise<void> {
+		const id = profile?.id;
+		if (!id) return;
+		setSheet('none');
+
+		try {
+			const spot = await (spotRef.current ?? meApi.birth());
+			await refreshGraph();
+
+			const renderer = rendererRef.current;
+			if (renderer) {
+				renderer.camera.flyTo(spot.x, spot.y, renderer.camera.maxZoom, BIRTH_FLY_MS);
+				await new Promise((done) => setTimeout(done, BIRTH_FLY_MS + BIRTH_PAUSE_MS));
+				await renderer.ignite(id);
+
+				const camera = renderer.camera;
+				const lift = (camera.viewHeight * COLORS_SHIFT) / camera.zoom;
+				camera.flyTo(spot.x, spot.y + lift, camera.zoom, 450);
+			}
+
+			await meApi.born();
+			await refreshProfile();
+		} finally {
+			// Не зажглась по ошибке сети — пусть звезда всё равно окажется на небе.
+			setUnborn(null);
+			setSheet('colors');
+		}
+	}
 
 	useEffect(() => {
 		if (!canvasRef.current) return;
@@ -49,11 +100,18 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 			onHover: (id) => hover(id),
 		});
 		rendererRef.current = renderer;
+		// Рендерер пересоздался — спрятанного он о себе не помнит.
+		renderer.setHidden(unbornRef.current === null ? [] : [unbornRef.current]);
 		return () => {
 			renderer.destroy();
 			rendererRef.current = null;
 		};
 	}, [select, hover]);
+
+	useEffect(() => {
+		unbornRef.current = unborn;
+		rendererRef.current?.setHidden(unborn === null ? [] : [unborn]);
+	}, [unborn]);
 
 	useEffect(() => {
 		void refreshGraph();
@@ -138,11 +196,13 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 			<Suggestions starAt={(id) => rendererRef.current?.screenOf(id) ?? null} />
 
 			<StarCard
-				onEditProfile={() => setShowProfile(true)}
+				onEditProfile={() => setSheet('profile')}
 				onFocus={(id) => rendererRef.current?.focusOn(id)}
 			/>
 
-			{showProfile && <ProfileSheet onClose={() => setShowProfile(false)} />}
+			{sheet === 'intro' && <ProfileSheet variant="intro" onClose={() => void birth()} />}
+			{sheet === 'colors' && <ProfileSheet variant="colors" onClose={() => setSheet('none')} />}
+			{sheet === 'profile' && <ProfileSheet variant="full" onClose={() => setSheet('none')} />}
 			{showInvite && <InviteSheet onClose={() => setShowInvite(false)} />}
 		</div>
 	);

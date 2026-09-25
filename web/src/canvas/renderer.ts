@@ -1,6 +1,7 @@
 // Рендер неба: один requestAnimationFrame-цикл на всё.
 import type { Graph } from '../api/types';
 import { clamp01, easeInOutCubic, easeOutBack, prefersReducedMotion } from './animate';
+import { birthStar, birthTuning, paintBirth, PROTOSTAR, type BirthStar } from './birth';
 import { Camera } from './camera';
 import { DUST_PARALLAX, DUST_TILE_SIZE, dustTile } from './dust';
 import { CORE, CORE_RGB, SKY_BOTTOM, SKY_MID, SKY_TOP, mix, rgb, rgba, type RGB } from './palette';
@@ -58,6 +59,44 @@ const CORONA_TONGUES_AT = [
 	{ radius: 4.0, tongues: 12 }, // звезда с одной связью
 	{ radius: 12.8, tongues: 15.5 }, // звезда с 25 связями
 ];
+// Длина языков растёт с числом связей: у одиночки их почти нет, на первой
+// связи ступенька, дальше ровный рост до полутораста. Ползунок — коэффициент
+// поверх этой кривой, единица и есть кривая.
+const FLAME_AT_LONER = 0.05;
+const FLAME_AT_ONE = 0.1;
+const FLAME_AT_MANY = 0.4;
+const FLAME_MANY = 150;
+
+// Ширина языка в долях углового шага между соседними: у одиночки узкие лучи,
+// к полутораста связям — сплошной венец. С 25 связей ширина разом берёт
+// надбавку и держит её дальше; на 150 выходит 4.4, и это осознанно.
+const FLAME_WIDTH_AT_LONER = 0.8;
+const FLAME_WIDTH_AT_MANY = 4;
+const FLAME_WIDTH_BONUS = 1.1;
+
+// Начало языка отсчитывается от центра в радиусах звезды; на тех же 25 связях
+// оно разом подбирается ближе к диску.
+const FLAME_FROM_BELOW = 0.59;
+const FLAME_FROM_ABOVE = 0.53;
+const FLAME_KNEE = 25;
+
+function flameWidth(degree: number): number {
+	const links = Math.max(0, degree);
+	const grow = Math.min(1, links / FLAME_MANY);
+	const base = FLAME_WIDTH_AT_LONER + (FLAME_WIDTH_AT_MANY - FLAME_WIDTH_AT_LONER) * grow;
+	return links < FLAME_KNEE ? base : base * FLAME_WIDTH_BONUS;
+}
+
+function flameFrom(degree: number): number {
+	return degree < FLAME_KNEE ? FLAME_FROM_BELOW : FLAME_FROM_ABOVE;
+}
+
+function flameLength(degree: number): number {
+	if (degree < 1) return FLAME_AT_LONER;
+	const t = Math.min(1, (degree - 1) / (FLAME_MANY - 1));
+	return FLAME_AT_ONE + (FLAME_AT_MANY - FLAME_AT_ONE) * t;
+}
+
 const CORONA_TONGUES_MIN = 8;
 const CORONA_TONGUES_MAX = 24;
 const CORONA_MIN_SCREEN = 7;
@@ -66,13 +105,14 @@ const CORONA_MAX_STARS = 40;
 // Личный множитель числа языков (User.flame, 0.55…1) закреплён за человеком навсегда.
 export type Flame = {
 	tongues: number; // общий множитель числа языков поверх личного
-	from: number; // начало языка, в радиусах звезды
-	length: number; // длина сверх радиуса звезды
-	width: number; // ширина у основания, в долях углового шага
+	from: number; // множитель начала языка; само начало — от числа связей
+	length: number; // множитель длины языков; сама длина — от числа связей
+	width: number; // множитель ширины языков; сама ширина — от числа связей
 	taper: number; // насколько язык пузатый: 0 — острый клин, 1 — лепесток
 	sweep: number; // подворот острия вбок, радианы
 	bow: number; // где приходится изгиб: 0 — у основания, 1 — у острия
 	alpha: number; // яркость
+	tint: number; // сколько в языках своего цвета: 0 — белые, 1 — чистый цвет
 	plateau: number; // доля длины, на которой язык держит яркость
 	flicker: number; // насколько гуляет длина: 0 — стоит, 1 — от нуля до полной
 	flickerSpeed: number; // секунд на цикл мерцания
@@ -90,13 +130,14 @@ const CORE_GRADIENT_MIN = 3;
 export const tuning = {
 	flame: {
 		tongues: 1,
-		from: 0.59,
-		length: 0.05,
-		width: 0.85,
-		taper: 0.21,
+		from: 1,
+		length: 1,
+		width: 1,
+		taper: 0.3,
 		sweep: 0,
 		bow: 0,
 		alpha: 0.6,
+		tint: 0.6,
 		plateau: 0.6,
 		flicker: 0.39,
 		flickerSpeed: 0.2,
@@ -137,6 +178,10 @@ export function createRenderer(
 	const camera = new Camera();
 	let scene: Scene = emptyScene();
 	let reduced = prefersReducedMotion();
+
+	// Звёзды, которых на небе ещё нет: рождение показывает их само.
+	let hidden = new Set<string>();
+	let birth: { id: string; start: number; done: () => void } | null = null;
 
 	let dpr = window.devicePixelRatio || 1;
 	let cssWidth = 0;
@@ -230,6 +275,40 @@ export function createRenderer(
 		};
 	}
 
+	// Всё о текущем кадре рождения: считается один раз, дальше только читается.
+	type BirthFrame = {
+		id: string;
+		t: number;
+		shape: BirthStar;
+		x: number;
+		y: number;
+		radius: number;
+	};
+
+	function birthFrame(now: number): BirthFrame | null {
+		if (!birth) return null;
+		const star = scene.stars.get(birth.id);
+		if (!star) {
+			finishBirth();
+			return null;
+		}
+
+		const t = clamp01((now - birth.start) / Math.max(1, birthTuning.duration));
+		if (t >= 1) {
+			finishBirth();
+			return null;
+		}
+
+		const { sx, sy, scale } = project(star, now);
+		return { id: star.id, t, shape: birthStar(t), x: sx, y: sy, radius: star.radius * scale };
+	}
+
+	function finishBirth(): void {
+		const current = birth;
+		birth = null;
+		current?.done();
+	}
+
 	function appearScale(star: Star, now: number): number {
 		if (star.appearAt === null) return 1;
 		const t = (now - star.appearAt) / APPEAR_DURATION;
@@ -248,6 +327,7 @@ export function createRenderer(
 		let best: { star: Star; distance: number } | null = null;
 
 		for (const star of scene.stars.values()) {
+			if (hidden.has(star.id)) continue;
 			const { sx, sy, scale } = project(star, now);
 			const distance = Math.hypot(sx - screenX, sy - screenY);
 			const reach = Math.max(star.radius * scale + HIT_PAD_WORLD * scale, HIT_PAD_MIN_SCREEN);
@@ -279,6 +359,8 @@ export function createRenderer(
 	function draw(now: number): void {
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+		const frame = birthFrame(now);
+
 		drawBackground();
 		drawDust();
 		drawNebulae();
@@ -289,9 +371,26 @@ export function createRenderer(
 
 		drawEdges(now, isLit);
 		drawInvites(now);
-		drawCorona(now, isLit);
-		drawCores(now, isLit);
-		drawLabels(now, isLit);
+		drawCorona(now, isLit, frame);
+		drawCores(now, isLit, frame);
+		drawBirth(frame);
+		drawLabels(now, isLit, frame);
+	}
+
+	function drawBirth(frame: BirthFrame | null): void {
+		if (!frame) return;
+
+		ctx.save();
+		ctx.globalCompositeOperation = 'lighter';
+		paintBirth({
+			ctx,
+			x: frame.x,
+			y: frame.y,
+			radius: frame.radius,
+			t: frame.t,
+			seed: fraction(frame.id, 5),
+		});
+		ctx.restore();
 	}
 
 	function drawBackground(): void {
@@ -311,16 +410,17 @@ export function createRenderer(
 		const offsetX = -((camera.x * camera.zoom * DUST_PARALLAX) % DUST_TILE_SIZE);
 		const offsetY = -((camera.y * camera.zoom * DUST_PARALLAX) % DUST_TILE_SIZE);
 
-		if (tuning.dustAlpha <= 0) return;
+		const dust = tuning.dustAlpha;
+		if (dust <= 0) return;
 
 		ctx.save();
 		ctx.translate(offsetX, offsetY);
 		ctx.fillStyle = pattern;
 		// Выше единицы прозрачность не поднять — набираем проходами.
-		ctx.globalAlpha = Math.min(1, tuning.dustAlpha);
+		ctx.globalAlpha = Math.min(1, dust);
 		const width = cssWidth + DUST_TILE_SIZE * 2;
 		const height = cssHeight + DUST_TILE_SIZE * 2;
-		for (let pass = tuning.dustAlpha; pass > 0; pass -= 1) {
+		for (let pass = dust; pass > 0; pass -= 1) {
 			ctx.globalAlpha = Math.min(1, pass);
 			ctx.fillRect(-offsetX - DUST_TILE_SIZE, -offsetY - DUST_TILE_SIZE, width, height);
 		}
@@ -396,6 +496,7 @@ export function createRenderer(
 		ctx.lineWidth = 0.8;
 
 		for (const [a, b] of scene.edges) {
+			if (hidden.has(a.id) || hidden.has(b.id)) continue;
 			const pa = project(a, now);
 			const pb = project(b, now);
 			let x1 = pa.sx;
@@ -477,7 +578,11 @@ export function createRenderer(
 	}
 
 	// Один путь и одна заливка на слой: две на звезду вместо сотни лепестков.
-	function drawCorona(now: number, isLit: (id: string) => boolean): void {
+	function drawCorona(
+		now: number,
+		isLit: (id: string) => boolean,
+		frame: BirthFrame | null,
+	): void {
 		const flame = tuning.flame;
 		if (flame.alpha <= 0) return;
 
@@ -486,13 +591,17 @@ export function createRenderer(
 
 		let drawn = 0;
 		for (const star of scene.byRadius) {
-			if (drawn >= CORONA_MAX_STARS) break;
-			if (star.node.isBlocked) continue;
+			const born = frame && frame.id === star.id ? frame.shape : null;
+			// Рождению бюджет не указ: своя звезда рисуется, даже если небо плотное.
+			if (drawn >= CORONA_MAX_STARS && !born) continue;
+			if (star.node.isBlocked || hidden.has(star.id)) continue;
 
 			const { sx, sy, scale: depthScale } = project(star, now);
 			const appear = appearScale(star, now);
-			const inner = star.radius * depthScale * appear;
-			const reachOut = inner * (1 + flame.length) * flame.softWidth;
+			const inner = star.radius * depthScale * appear * (born ? born.scale : 1);
+			const length = flameLength(star.node.degree) * flame.length;
+			const width = flameWidth(star.node.degree) * flame.width;
+			const reachOut = inner * (1 + length) * flame.softWidth;
 			// Порог по видимому размеру со свечением: по одному радиусу пламя пропадало бы рано.
 			if (reachOut < CORONA_MIN_SCREEN) continue;
 			if (
@@ -510,11 +619,13 @@ export function createRenderer(
 				Math.round(tongueCount(star.radius) * star.flame * flame.tongues),
 			);
 			const step = (Math.PI * 2) / count;
-			const dim = isLit(star.id) ? 1 : 1 - 0.65 * highlight;
+			const dim = (isLit(star.id) ? 1 : 1 - 0.65 * highlight) * (born ? born.alpha : 1);
+			const own = born && born.warmth > 0 ? mix(star.halo, PROTOSTAR, born.warmth) : star.halo;
+			const glow = mix(CORE_RGB, own, flame.tint);
 			const seed = fraction(star.id, 21);
 			const turn = flame.spin > 0 ? spinAt(flame.spin, now, seed) : seed * Math.PI * 2;
-			const from = inner * flame.from;
-			const full = inner * (1 + flame.length);
+			const from = inner * flameFrom(star.node.degree) * flame.from;
+			const full = inner * (1 + length);
 			const wave =
 				reduced || flame.flickerSpeed <= 0
 					? 0
@@ -524,7 +635,7 @@ export function createRenderer(
 				const beat = reduced
 					? 1
 					: 1 - flame.flicker + flame.flicker * (0.5 + 0.5 * Math.sin(wave + i * 2.7));
-				return inner * (1 + flame.length * beat);
+				return inner * (1 + length * beat);
 			};
 
 			// Копия утоплена внутрь: так она закрывает зазор между языками и диском.
@@ -542,7 +653,7 @@ export function createRenderer(
 						turn + i * step,
 						softFrom,
 						inner + (reach(i) - inner) * flame.softWidth - shift,
-						step * flame.width * flame.softWidth,
+						step * width * flame.softWidth,
 						flame.sweep,
 						flame.taper,
 						flame.bow,
@@ -553,7 +664,7 @@ export function createRenderer(
 					sy,
 					softFrom,
 					inner + (full - inner) * flame.softWidth - shift,
-					star.halo,
+					glow,
 					flame.alpha * flame.soft * dim,
 					flame.plateau,
 				);
@@ -568,7 +679,7 @@ export function createRenderer(
 					turn + i * step,
 					from,
 					reach(i),
-					step * flame.width,
+					step * width,
 					flame.sweep,
 					flame.taper,
 					flame.bow,
@@ -579,7 +690,7 @@ export function createRenderer(
 				sy,
 				from,
 				full,
-				star.halo,
+				glow,
 				flame.alpha * dim,
 				flame.plateau,
 			);
@@ -658,10 +769,12 @@ export function createRenderer(
 		return gradient;
 	}
 
-	function drawCores(now: number, isLit: (id: string) => boolean): void {
+	function drawCores(now: number, isLit: (id: string) => boolean, frame: BirthFrame | null): void {
 		for (const star of scene.order) {
+			if (hidden.has(star.id)) continue;
+			const born = frame && frame.id === star.id ? frame.shape : null;
 			const { sx: x, sy: y, scale: depthScale } = project(star, now);
-			const scale = appearScale(star, now);
+			const scale = appearScale(star, now) * (born ? born.scale : 1);
 			const radius = Math.max(
 				0.7,
 				star.radius * depthScale * scale * tuning.coreSize * corePulse(star, now),
@@ -669,7 +782,12 @@ export function createRenderer(
 			if (x + radius < 0 || x - radius > cssWidth || y + radius < 0 || y - radius > cssHeight)
 				continue;
 
-			const dim = isLit(star.id) ? 1 : 1 - 0.65 * highlight;
+			const dim = (isLit(star.id) ? 1 : 1 - 0.65 * highlight) * (born ? born.alpha : 1);
+			const warmth = born ? born.warmth : 0;
+			const own = warmth > 0 ? mix(star.halo, PROTOSTAR, warmth) : star.halo;
+			// Ореол за кромкой — продолжение языков, значит и белеет вместе с ними.
+			const glow = mix(CORE_RGB, own, tuning.flame.tint);
+			const heart = warmth > 0 ? mix(star.core, PROTOSTAR, warmth) : star.core;
 			ctx.globalAlpha = star.node.isBlocked ? 0.35 * dim : dim;
 
 			if (star.node.isBlocked || radius < CORE_GRADIENT_MIN) {
@@ -682,16 +800,16 @@ export function createRenderer(
 				ctx.save();
 				ctx.globalCompositeOperation = 'lighter';
 				const edge = radius * (1 + tuning.coreGlow);
-				const glow = ctx.createRadialGradient(x, y, radius * 0.92, x, y, edge);
-				glow.addColorStop(0, rgba(star.halo, tuning.coreGlowAlpha * dim));
-				glow.addColorStop(1, rgba(star.halo, 0));
-				ctx.fillStyle = glow;
+				const rim = ctx.createRadialGradient(x, y, radius * 0.92, x, y, edge);
+				rim.addColorStop(0, rgba(glow, tuning.coreGlowAlpha * dim));
+				rim.addColorStop(1, rgba(glow, 0));
+				ctx.fillStyle = rim;
 				ctx.beginPath();
 				ctx.arc(x, y, edge, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.restore();
 
-				const centre = mix(CORE_RGB, star.halo, tuning.coreTint);
+				const centre = mix(CORE_RGB, heart, tuning.coreTint);
 				const hold = tuning.coreRim * tuning.coreSharp;
 				const disc = ctx.createRadialGradient(x, y, 0, x, y, radius);
 				disc.addColorStop(0, rgb(centre));
@@ -708,7 +826,7 @@ export function createRenderer(
 	}
 
 	// Только вблизи и у заметных: иначе небо превращается в свалку.
-	function drawLabels(now: number, isLit: (id: string) => boolean): void {
+	function drawLabels(now: number, isLit: (id: string) => boolean, frame: BirthFrame | null): void {
 		if (camera.zoom < LABEL_ZOOM && !options.labelAll) return;
 
 		ctx.save();
@@ -719,6 +837,8 @@ export function createRenderer(
 		ctx.shadowBlur = 4;
 
 		for (const star of scene.order) {
+			// Имя появляется вместе со звездой, а не над местом, где её ещё нет.
+			if (hidden.has(star.id) || frame?.id === star.id) continue;
 			const notable =
 				options.labelAll === true ||
 				star.node.degree >= 4 ||
@@ -919,6 +1039,27 @@ export function createRenderer(
 			const { sx, sy, scale } = project(star, performance.now());
 			const rect = canvas.getBoundingClientRect();
 			return { x: rect.left + sx, y: rect.top + sy, radius: star.radius * scale };
+		},
+		// Кого на небе ещё нет: рождение зажигает их само.
+		setHidden(ids: string[]): void {
+			hidden = new Set(ids);
+		},
+		// Обещание исполняется, когда звезда догорела до своего размера.
+		ignite(id: string): Promise<void> {
+			finishBirth();
+			hidden.delete(id);
+			const star = scene.stars.get(id);
+			if (star) {
+				star.appearAt = null;
+				// Место звезда получила, пока была спрятана: переезжать ей неоткуда,
+				// иначе рождение поедет вместе с ней от середины неба.
+				star.fromX = star.toX;
+				star.fromY = star.toY;
+				star.moveStart = 0;
+			}
+			return new Promise((resolve) => {
+				birth = { id, start: performance.now(), done: resolve };
+			});
 		},
 		zoomBy: (factor: number) => camera.zoomAt(factor, cssWidth / 2, cssHeight / 2),
 		fit: () => camera.fit(scene.bounds),

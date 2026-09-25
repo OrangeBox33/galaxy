@@ -12,16 +12,14 @@ export type ProfileView = {
 	isAdmin: boolean;
 	isTest: boolean;
 	nameLockedByAdmin: boolean;
-	needsProfileSetup: boolean;
+	// Первый вход: показать окно профиля, а после него — рождение звезды.
+	needsBirth: boolean;
+	coreColor: string | null;
+	flameColor: string | null;
 	// Ссылка постоянная: одна и та же на все входы.
 	inviteUrl: string | null;
 	shareText: string;
 };
-
-// Первый вход: о себе ничего не указано — показываем профиль, но пропустить можно.
-function needsSetup(user: User): boolean {
-	return user.customName === null && user.age === null && user.gender === 'UNSPECIFIED';
-}
 
 export function toProfile(user: User): ProfileView {
 	return {
@@ -33,7 +31,9 @@ export function toProfile(user: User): ProfileView {
 		isAdmin: isAdmin(user.id),
 		isTest: user.isTest,
 		nameLockedByAdmin: user.nameLockedByAdmin,
-		needsProfileSetup: needsSetup(user),
+		needsBirth: !user.bornSeen,
+		coreColor: user.coreColor,
+		flameColor: user.flameColor,
 		inviteUrl: user.inviteToken ? inviteUrl(user.inviteToken) : null,
 		shareText: SHARE_TEXT,
 	};
