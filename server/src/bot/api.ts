@@ -16,7 +16,14 @@ function isFatal(description: string): boolean {
 	);
 }
 
-async function parse(res: Response): Promise<unknown> {
+async function call(method: string, payload: unknown): Promise<unknown> {
+	const res = await fetch(`${BASE}/${method}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload),
+		signal: AbortSignal.timeout(10_000),
+	});
+
 	const data = (await res.json()) as { ok: boolean; description?: string; result?: unknown };
 	if (!data.ok) {
 		const error = new Error(data.description ?? `ошибка ${res.status}`) as TelegramError;
@@ -25,17 +32,6 @@ async function parse(res: Response): Promise<unknown> {
 		throw error;
 	}
 	return data.result;
-}
-
-async function call(method: string, payload: unknown): Promise<unknown> {
-	return parse(
-		await fetch(`${BASE}/${method}`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(payload),
-			signal: AbortSignal.timeout(10_000),
-		}),
-	);
 }
 
 export async function sendMessage(
@@ -50,28 +46,6 @@ export async function sendMessage(
 		disable_web_page_preview: true,
 		...(replyMarkup ? { reply_markup: replyMarkup } : {}),
 	});
-}
-
-// Файл уходит multipart'ом: JSON'ом Bot API документы не принимает, поэтому
-// мимо call(). Content-Type не ставим — fetch сам допишет границу частей.
-export async function sendDocument(
-	chatId: bigint,
-	filename: string,
-	bytes: Buffer,
-	caption: string,
-): Promise<void> {
-	const form = new FormData();
-	form.append('chat_id', chatId.toString());
-	form.append('caption', caption);
-	form.append('document', new Blob([bytes]), filename);
-
-	await parse(
-		await fetch(`${BASE}/sendDocument`, {
-			method: 'POST',
-			body: form,
-			signal: AbortSignal.timeout(120_000),
-		}),
-	);
 }
 
 // Аватарка через Bot API, а не через photo_url из initData: у того публичный
