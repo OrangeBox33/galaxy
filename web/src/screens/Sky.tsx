@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { GRAPH_POLL_MS } from '../../../shared/config';
 import { me as meApi } from '../api/endpoints';
+import { playBirth, playClick } from '../sound';
 import { useStore } from '../store';
 import { EDGES_HIDDEN, createRenderer, type EdgeMode, type Renderer } from '../canvas/renderer';
 import { StarCard } from '../components/StarCard';
@@ -64,6 +65,10 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 			if (renderer) {
 				renderer.camera.flyTo(spot.x, spot.y, renderer.camera.maxZoom, BIRTH_FLY_MS);
 				await new Promise((done) => setTimeout(done, BIRTH_FLY_MS + BIRTH_PAUSE_MS));
+				// Звук сам отмеряет до вспышки по birthTuning, поэтому зовётся вплотную к ignite.
+				playBirth(
+					useStore.getState().graph?.nodes.find((item) => item.id === id)?.degree ?? 0,
+				);
 				await renderer.ignite(id);
 
 				const camera = renderer.camera;
@@ -94,6 +99,12 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 				if (current?.kind === pick.kind && current.id === pick.id) {
 					select(null);
 					return;
+				}
+				if (pick.kind === 'node') {
+					const node = useStore
+						.getState()
+						.graph?.nodes.find((item) => item.id === pick.id);
+					playClick(node?.degree ?? 0);
 				}
 				select({ kind: pick.kind, id: pick.id });
 			},
@@ -134,7 +145,9 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 
 	useEffect(() => {
 		if (!graph) return;
-		const files = graph.nodes.map((node) => node.avatar).filter((file): file is string => !!file);
+		const files = graph.nodes
+			.map((node) => node.avatar)
+			.filter((file): file is string => !!file);
 		let cancelled = false;
 		let index = 0;
 
@@ -179,16 +192,32 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 			</div>
 
 			<div className="sky__tools">
-				<button className="round" title="Найти меня" onClick={() => rendererRef.current?.focusOnMe()}>
+				<button
+					className="round"
+					title="Найти меня"
+					onClick={() => rendererRef.current?.focusOnMe()}
+				>
 					◎
 				</button>
-				<button className="round" title="Всё небо" onClick={() => rendererRef.current?.fit()}>
+				<button
+					className="round"
+					title="Всё небо"
+					onClick={() => rendererRef.current?.fit()}
+				>
 					⤢
 				</button>
-				<button className="round" title="Приблизить" onClick={() => rendererRef.current?.zoomBy(1.3)}>
+				<button
+					className="round"
+					title="Приблизить"
+					onClick={() => rendererRef.current?.zoomBy(1.3)}
+				>
 					+
 				</button>
-				<button className="round" title="Отдалить" onClick={() => rendererRef.current?.zoomBy(1 / 1.3)}>
+				<button
+					className="round"
+					title="Отдалить"
+					onClick={() => rendererRef.current?.zoomBy(1 / 1.3)}
+				>
 					−
 				</button>
 			</div>
@@ -201,8 +230,12 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 			/>
 
 			{sheet === 'intro' && <ProfileSheet variant="intro" onClose={() => void birth()} />}
-			{sheet === 'colors' && <ProfileSheet variant="colors" onClose={() => setSheet('none')} />}
-			{sheet === 'profile' && <ProfileSheet variant="full" onClose={() => setSheet('none')} />}
+			{sheet === 'colors' && (
+				<ProfileSheet variant="colors" onClose={() => setSheet('none')} />
+			)}
+			{sheet === 'profile' && (
+				<ProfileSheet variant="full" onClose={() => setSheet('none')} />
+			)}
 			{showInvite && <InviteSheet onClose={() => setShowInvite(false)} />}
 		</div>
 	);

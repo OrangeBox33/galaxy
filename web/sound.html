@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>Galaxy — песочница звука</title>
+		<style>
+			body {
+				background: #05070f;
+				color: #8fa3c8;
+				font:
+					14px/1.6 -apple-system,
+					sans-serif;
+				margin: 0;
+			}
+			.stand {
+				max-width: 420px;
+				padding: 48px 32px;
+			}
+			.pads {
+				display: flex;
+				flex-direction: column;
+				gap: 10px;
+				margin: 0 0 28px;
+			}
+			.pads button {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 16px 18px;
+				border-radius: 10px;
+				border: 1px solid #2a3652;
+				background: #101829;
+				color: #dbe4f7;
+				font: 15px/1 inherit;
+				cursor: pointer;
+			}
+			.pads button:hover {
+				background: #1a2340;
+				border-color: #3a4a70;
+			}
+			.pads button:active {
+				background: #243059;
+			}
+			.pads kbd {
+				background: #05070f;
+				border: 1px solid #2a3652;
+				border-radius: 4px;
+				padding: 3px 8px;
+				color: #7fe0c0;
+				font: 12px monospace;
+			}
+			.stand p {
+				margin: 0 0 10px;
+			}
+		</style>
+	</head>
+	<body>
+		<!--
+			Песочница звука: настоящий синтез из src/sound.ts, без сервера и неба.
+			Открывается на http://localhost:3006/galaxy/sound.html (npm run dev в web/).
+			В сборку не попадает: vite собирает только index.html.
+		-->
+		<div class="stand">
+			<div class="pads">
+				<button id="play-click">Клик по звезде <kbd>1</kbd></button>
+				<button id="play-birth">Рождение <kbd>2</kbd></button>
+				<button id="play-link">Новая связь <kbd>3</kbd></button>
+			</div>
+			<p>Лад — какие ноты, тембр — чем они звучат. Остальное правится ползунками справа.</p>
+			<p>«Скопировать» отдаёт весь soundTuning JSON'ом — его и переносить в код.</p>
+		</div>
+		<script type="module" src="/src/soundSandbox.ts"></script>
+	</body>
+</html>

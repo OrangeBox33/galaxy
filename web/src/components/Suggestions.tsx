@@ -7,6 +7,7 @@
 // под пальцем, когда своя же новая связь роняет у соседей число общих друзей.
 import { useEffect, useRef, useState } from 'react';
 import type { Gender } from '../../../shared/config';
+import { playLink } from '../sound';
 import { useStore } from '../store';
 import { suggestFriends } from '../../../shared/suggest';
 import { Avatar } from './Avatar';
@@ -38,7 +39,9 @@ type Row = {
 };
 
 function same(a: Row[], b: Row[]): boolean {
-	return a.length === b.length && a.every((row, i) => row.id === b[i].id && row.exit === b[i].exit);
+	return (
+		a.length === b.length && a.every((row, i) => row.id === b[i].id && row.exit === b[i].exit)
+	);
 }
 
 // Искра живёт в body с position: fixed: у карточки overflow: hidden, у неба своя канва,
@@ -59,10 +62,22 @@ function flySpark(from: { x: number; y: number }, to: { x: number; y: number } |
 		const dy = to.y - from.y;
 		let k = 1;
 		if (dx !== 0) {
-			k = Math.min(k, Math.max((EDGE_MARGIN - from.x) / dx, (window.innerWidth - EDGE_MARGIN - from.x) / dx));
+			k = Math.min(
+				k,
+				Math.max(
+					(EDGE_MARGIN - from.x) / dx,
+					(window.innerWidth - EDGE_MARGIN - from.x) / dx,
+				),
+			);
 		}
 		if (dy !== 0) {
-			k = Math.min(k, Math.max((EDGE_MARGIN - from.y) / dy, (window.innerHeight - EDGE_MARGIN - from.y) / dy));
+			k = Math.min(
+				k,
+				Math.max(
+					(EDGE_MARGIN - from.y) / dy,
+					(window.innerHeight - EDGE_MARGIN - from.y) / dy,
+				),
+			);
 		}
 		k = Math.max(0.15, Math.min(1, k));
 		endX = from.x + dx * k;
@@ -80,7 +95,11 @@ function flySpark(from: { x: number; y: number }, to: { x: number; y: number } |
 	const animation = seed.animate(
 		[
 			{ transform: 'translate(0px, 0px) scale(0.35)', opacity: 0.9 },
-			{ transform: `translate(${dx * 0.45}px, ${dy * 0.45}px) scale(1)`, opacity: 1, offset: 0.3 },
+			{
+				transform: `translate(${dx * 0.45}px, ${dy * 0.45}px) scale(1)`,
+				opacity: 1,
+				offset: 0.3,
+			},
 			{ transform: `translate(${dx}px, ${dy}px) scale(${inside ? 0.22 : 0.5})`, opacity: 0 },
 		],
 		{ duration: FLIGHT_MS, easing: 'cubic-bezier(0.35, 0, 0.25, 1)', fill: 'forwards' },
@@ -165,10 +184,13 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 		};
 
 		if (mode === 'burst') {
+			playLink(nodes.get(graph!.me)?.degree ?? 0, nodes.get(row.id)?.degree ?? 0);
 			setTimeout(() => flySpark(at, starAt(graph!.me)), BURST_MS * SEED_AT);
 		}
 
-		setRows((current) => current.map((item) => (item.id === row.id ? { ...item, exit } : item)));
+		setRows((current) =>
+			current.map((item) => (item.id === row.id ? { ...item, exit } : item)),
+		);
 		timers.current.push(
 			setTimeout(
 				() => setRows((current) => current.filter((item) => item.id !== row.id)),
@@ -191,7 +213,10 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 						className={`suggest__item${row.exit ? ` suggest__item--${row.exit.mode}` : ''}`}
 						style={
 							row.exit
-								? { ['--fx' as string]: row.exit.fx, ['--fy' as string]: row.exit.fy }
+								? {
+										['--fx' as string]: row.exit.fx,
+										['--fy' as string]: row.exit.fy,
+									}
 								: undefined
 						}
 					>
