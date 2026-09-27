@@ -102,7 +102,6 @@ const sections: Section[] = [
 		title: 'Рождение',
 		bag,
 		controls: [
-			range('birthSweep', 'секунд разгона', 0.2, 4, 0.05),
 			range('birthFrom', 'срез в начале, Гц', 60, 2000, 10),
 			range('birthTo', 'срез у вспышки, Гц', 1000, 16000, 100),
 			range('birthSwoosh', 'громкость разгона', 0, 1, 0.01),
