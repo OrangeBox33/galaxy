@@ -120,6 +120,7 @@ export const soundTuning = {
 	clickTick: 0.22, // щелчок атаки: без него удар неотличим от свиста
 	clickTone: 3000, // Гц, срез поверх обертонов
 
+	birthSweep: 1.3, // секунд разгона до вспышки
 	birthFrom: 260,
 	birthTo: 6500,
 	birthSwoosh: 0.5,
@@ -482,10 +483,11 @@ export function playBirth(degree = 0): void {
 	const e = ready();
 	if (!e) return;
 	const T = soundTuning;
-	// Шипение идёт весь сбор искр, вспышка звучит там же, где видна.
-	const now = e.ctx.currentTime;
-	const flash = now + (birthTuning.gather * birthTuning.duration) / 1000;
-	swoosh(e, now, flash - now, T.birthFrom, T.birthTo, T.birthSwoosh, 0.15);
+	// Вспышка звучит там же, где видна: время берётся из настроек анимации.
+	const flash = e.ctx.currentTime + (birthTuning.gather * birthTuning.duration) / 1000;
+	// Разгон длиннее самой анимации начинался бы в прошлом, и его срезало бы.
+	const sweep = Math.min(T.birthSweep, flash - e.ctx.currentTime);
+	swoosh(e, flash - sweep, sweep, T.birthFrom, T.birthTo, T.birthSwoosh, 0.15);
 	sub(e, flash, T.birthSub);
 	chord(e, flash + 0.04, Math.max(0, semisFor(degree) - T.birthDrop), T.birthChord, T.birthTail);
 }
