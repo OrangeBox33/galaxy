@@ -31,8 +31,7 @@ export type RendererHandlers = {
 };
 
 // Ниже 14 экранных пикселей в звезду перестаёт попадать палец.
-const HIT_PAD_WORLD = 8;
-const HIT_PAD_MIN_SCREEN = 14;
+const HIT_MIN_SCREEN = 14;
 
 const DEPTH_STRENGTH = 0.22;
 
@@ -199,6 +198,10 @@ export function createRenderer(
 	let firstFit = true;
 
 	let grab: Grab = null;
+	// Видимая точка под пальцем. Кружение звезды из неё вычитается каждый кадр,
+	// иначе на захвате звезда прыгала на размах своей орбиты.
+	let grabAt = { x: 0, y: 0 };
+	let grabOffset = { x: 0, y: 0 };
 	let wobbling = false;
 
 	let showAllEdges = options.showEdges === true;
@@ -354,7 +357,8 @@ export function createRenderer(
 			if (hidden.has(star.id)) continue;
 			const { sx, sy, scale } = project(star, now);
 			const distance = Math.hypot(sx - screenX, sy - screenY);
-			const reach = Math.max(star.radius * scale + HIT_PAD_WORLD * scale, HIT_PAD_MIN_SCREEN);
+			// Только ядро: запас вокруг рос с зумом, и вблизи вместо неба тащилась звезда.
+			const reach = Math.max(star.radius * scale * tuning.coreSize, HIT_MIN_SCREEN);
 			if (distance > reach) continue;
 			if (!best || distance < best.distance) best = { star, distance };
 		}
@@ -875,6 +879,12 @@ export function createRenderer(
 		resize();
 		camera.update(dt, scene.bounds);
 
+		if (grab) {
+			const { star } = grab;
+			const live = livePosition(star, now);
+			grab.worldX = grabAt.x - (live.x - star.toX - star.ox);
+			grab.worldY = grabAt.y - (live.y - star.toY - star.oy);
+		}
 		if (grab || wobbling) wobbling = stepWobble(scene, grab, dt);
 
 		const target = selectedId ? 1 : 0;
@@ -917,6 +927,11 @@ export function createRenderer(
 		flingX = 0;
 		flingY = 0;
 		candidate = pickStar(point.x, point.y);
+		if (candidate) {
+			const live = livePosition(candidate, performance.now());
+			const world = screenToWorldAtDepth(point.x, point.y, candidate.depth);
+			grabOffset = { x: live.x - world.x, y: live.y - world.y };
+		}
 		lastPoint = { ...point, t: performance.now() };
 		camera.beginDrag();
 	}
@@ -959,8 +974,7 @@ export function createRenderer(
 				camera.stop();
 			}
 			const world = screenToWorldAtDepth(point.x, point.y, candidate.depth);
-			grab.worldX = world.x;
-			grab.worldY = world.y;
+			grabAt = { x: world.x + grabOffset.x, y: world.y + grabOffset.y };
 			wobbling = true;
 			lastPoint = { ...point, t: performance.now() };
 			return;
