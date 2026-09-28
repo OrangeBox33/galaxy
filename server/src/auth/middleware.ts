@@ -5,6 +5,7 @@ import { isAdmin } from '../env.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { readSession } from './session.js';
 import { db } from '../db.js';
+import { rememberVisitor } from '../lib/visitors.js';
 
 declare global {
 	// eslint-disable-next-line @typescript-eslint/no-namespace
@@ -22,6 +23,7 @@ export function requireSession(req: Request, _res: Response, next: NextFunction)
 		return;
 	}
 	req.userId = userId;
+	rememberVisitor(req.ip, userId);
 	next();
 }
 

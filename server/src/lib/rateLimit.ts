@@ -4,6 +4,7 @@ import { tooMany } from './errors.js';
 import { readSession } from '../auth/session.js';
 import { isAdmin } from '../env.js';
 import { log } from './log.js';
+import { describeUsers, visitorsLine, visitorsOf } from './visitors.js';
 
 const WINDOW_MS = 60_000;
 
@@ -38,10 +39,7 @@ export function rateLimit(name: string, limit: number) {
 		if (bucket.count >= limit) {
 			if (!bucket.reported) {
 				bucket.reported = true;
-				log.error(
-					{ method: req.method, path: req.baseUrl + req.path },
-					`упёрся в лимит ${name} (${limit} в минуту): ${who}`,
-				);
+				void reportLimit(name, limit, id, who, req.method, req.baseUrl + req.path);
 			}
 			next(tooMany());
 			return;
@@ -49,6 +47,29 @@ export function rateLimit(name: string, limit: number) {
 		bucket.count += 1;
 		next();
 	};
+}
+
+async function reportLimit(
+	name: string,
+	limit: number,
+	id: bigint | null,
+	who: string,
+	method: string,
+	path: string,
+): Promise<void> {
+	let title = who;
+	let detail: string | undefined;
+	try {
+		if (id !== null) {
+			title = (await describeUsers([id])).get(id) ?? who;
+		} else {
+			const ids = visitorsOf(who);
+			detail = visitorsLine(ids, await describeUsers(ids));
+		}
+	} catch {
+		// Без имени оповещение всё равно нужно.
+	}
+	log.error({ method, path, detail }, `упёрся в лимит ${name} (${limit} в минуту): ${title}`);
 }
 
 // Общий предел на все изменяющие запросы; отдельные маршруты строже.

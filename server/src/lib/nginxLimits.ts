@@ -1,6 +1,7 @@
 // nginx отсекает лишнее до Node, и узнать об этом можно только из его журнала.
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { log } from './log.js';
+import { describeUsers, visitorsLine, visitorsOf } from './visitors.js';
 
 const LOG_PATH = '/var/log/nginx/error.log';
 const POLL_MS = 15_000;
@@ -10,6 +11,29 @@ const LIMITED =
 	/limiting (?:requests|connections)[^"]* by zone "(galaxy_\w+)", client: ([^,]+),.*?request: "(\S+) (\S+)/;
 
 type Hit = { count: number; method: string; path: string };
+
+async function report(hits: Map<string, Hit>, truncated: boolean): Promise<void> {
+	const clients = new Map([...hits.keys()].map((key) => [key, visitorsOf(key.split(' ')[1])]));
+	let names = new Map<bigint, string>();
+	try {
+		names = await describeUsers([...new Set([...clients.values()].flat())]);
+	} catch {
+		// Без имён оповещение всё равно нужно.
+	}
+
+	for (const [key, hit] of hits) {
+		const [zone, client] = key.split(' ');
+		const count = `${truncated ? 'не меньше ' : ''}${hit.count}`;
+		log.error(
+			{
+				method: hit.method,
+				path: hit.path,
+				detail: `Отсечено за ${POLL_MS / 1000} с: ${count}\n${visitorsLine(clients.get(key)!, names)}`,
+			},
+			`nginx: ${client} упёрся в лимит ${zone}`,
+		);
+	}
+}
 
 export function watchNginxLimits(): void {
 	let inode: number;
@@ -65,16 +89,6 @@ export function watchNginxLimits(): void {
 			else hits.set(key, { count: 1, method, path });
 		}
 
-		for (const [key, hit] of hits) {
-			const [zone, client] = key.split(' ');
-			log.error(
-				{
-					method: hit.method,
-					path: hit.path,
-					detail: `Отсечено за ${POLL_MS / 1000} с: ${truncated ? 'не меньше ' : ''}${hit.count}`,
-				},
-				`nginx: ${client} упёрся в лимит ${zone}`,
-			);
-		}
+		if (hits.size > 0) void report(hits, truncated);
 	}, POLL_MS).unref();
 }
