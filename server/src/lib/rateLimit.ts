@@ -2,10 +2,12 @@
 import type { NextFunction, Request, Response } from 'express';
 import { tooMany } from './errors.js';
 import { readSession } from '../auth/session.js';
+import { isAdmin } from '../env.js';
+import { log } from './log.js';
 
 const WINDOW_MS = 60_000;
 
-type Bucket = { count: number; resetAt: number };
+type Bucket = { count: number; resetAt: number; reported?: boolean };
 const buckets = new Map<string, Bucket>();
 
 // Чистка раз в минуту, чтобы карта не росла бесконечно на редких посетителях.
@@ -18,7 +20,12 @@ setInterval(() => {
 
 export function rateLimit(name: string, limit: number) {
 	return (req: Request, _res: Response, next: NextFunction): void => {
-		const who = (req.userId ?? readSession(req))?.toString() ?? req.ip ?? 'unknown';
+		const id = req.userId ?? readSession(req);
+		if (id !== null && isAdmin(id)) {
+			next();
+			return;
+		}
+		const who = id?.toString() ?? req.ip ?? 'unknown';
 		const key = `${name}:${who}`;
 		const now = Date.now();
 		const bucket = buckets.get(key);
@@ -29,6 +36,13 @@ export function rateLimit(name: string, limit: number) {
 			return;
 		}
 		if (bucket.count >= limit) {
+			if (!bucket.reported) {
+				bucket.reported = true;
+				log.error(
+					{ method: req.method, path: req.baseUrl + req.path },
+					`упёрся в лимит ${name} (${limit} в минуту): ${who}`,
+				);
+			}
 			next(tooMany());
 			return;
 		}

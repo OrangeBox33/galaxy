@@ -4,16 +4,19 @@ import { env } from './env.js';
 import { db } from './db.js';
 import { log } from './lib/log.js';
 import { drainAlerts, startAlerts } from './lib/alert.js';
+import { watchNginxLimits } from './lib/nginxLimits.js';
 import { createApp } from './app.js';
 import { startLayoutScheduler } from './layout/runner.js';
 import { startOutboxWorker } from './bot/worker.js';
 
 startAlerts();
+watchNginxLimits();
 
 // Каталог аватарок лежит вне dist и переживает деплой; создаём, если его ещё нет.
 mkdirSync(env.avatarDir, { recursive: true });
 
-const server = createApp().listen(env.port, () => {
+// Снаружи — только через nginx: напрямую обходятся его лимиты и подделывается X-Forwarded-For.
+const server = createApp().listen(env.port, '127.0.0.1', () => {
 	log.info(`Galaxy слушает порт ${env.port}, базовый путь ${BASE_PATH}`);
 	// Оба держат состояние в памяти: инстанс pm2 обязан быть ровно один.
 	startLayoutScheduler();

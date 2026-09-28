@@ -5,12 +5,14 @@ import { db } from '../db.js';
 import { displayName } from '../lib/names.js';
 import { requireActiveUser, requireSession } from '../auth/middleware.js';
 import { getLayoutScale, getLayoutVersion } from '../layout/state.js';
+import { rateLimit } from '../lib/rateLimit.js';
 
 export function graphRouter(): Router {
 	const router = Router();
 	router.use(requireSession, requireActiveUser);
 
-	router.get('/', async (req, res, next) => {
+	// 30 быстрых «Связать» в минуту дают около 35 запросов: по одному на нажатие плюс FOLLOW_UP_MS.
+	router.get('/', rateLimit('graph', 40), async (req, res, next) => {
 		try {
 			const userId = req.userId!;
 

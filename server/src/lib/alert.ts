@@ -16,6 +16,7 @@ type Line = {
 	msg?: string;
 	method?: string;
 	path?: string;
+	detail?: string;
 	err?: { type?: string; message?: string; stack?: string };
 };
 
@@ -25,6 +26,7 @@ const escape = (text: string) =>
 function format(line: Line): string {
 	const parts = [`🔴 <b>Galaxy: ${escape(line.msg ?? 'ошибка')}</b>`];
 	if (line.method && line.path) parts.push(escape(`${line.method} ${line.path}`));
+	if (line.detail) parts.push(escape(line.detail));
 	const detail = line.err?.stack ?? line.err?.message;
 	if (detail) {
 		parts.push(`<pre>${escape(detail.split('\n').slice(0, STACK_LINES).join('\n'))}</pre>`);
