@@ -3,11 +3,10 @@ import { Router } from 'express';
 import { MAX_LINKS_PER_USER } from '../../../shared/config.js';
 import { db } from '../db.js';
 import { conflict, forbidden, notFound } from '../lib/errors.js';
-import { displayName } from '../lib/names.js';
 import { normalizePair } from '../lib/pair.js';
 import { rateLimit } from '../lib/rateLimit.js';
 import { bigint, body as reqBody } from '../lib/validate.js';
-import { enqueue, escapeHtml } from '../bot/outbox.js';
+import { enqueue } from '../bot/outbox.js';
 import { markLayoutDirty } from '../layout/state.js';
 import { requireActiveUser, requireSession } from '../auth/middleware.js';
 
@@ -46,13 +45,7 @@ export function linksRouter(): Router {
 				await tx.user.update({ where: { id: aId }, data: { degree: { increment: 1 } } });
 				await tx.user.update({ where: { id: bId }, data: { degree: { increment: 1 } } });
 
-				const me = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-				await enqueue(
-					tx,
-					targetId,
-					'linked',
-					`✨ <b>${escapeHtml(displayName(me))}</b> отметил(а) знакомство с тобой на карте.`,
-				);
+				await enqueue(tx, targetId, 'linked', userId);
 				await markLayoutDirty(tx);
 			});
 

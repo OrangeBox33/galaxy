@@ -34,6 +34,10 @@ async function call(method: string, payload: unknown): Promise<unknown> {
 	return data.result;
 }
 
+export const OPEN_MAP_KEYBOARD = {
+	inline_keyboard: [[{ text: '🌌 Открыть карту', web_app: { url: env.publicBaseUrl } }]],
+};
+
 export async function sendMessage(
 	chatId: bigint,
 	text: string,

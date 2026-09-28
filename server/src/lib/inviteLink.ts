@@ -4,10 +4,9 @@ import { randomInt } from 'node:crypto';
 import type { Prisma, User } from '@prisma/client';
 import { MAX_LINKS_PER_USER } from '../../../shared/config.js';
 import { env } from '../env.js';
-import { displayName } from './names.js';
 import { normalizePair } from './pair.js';
 import { markLayoutDirty } from '../layout/state.js';
-import { enqueue, escapeHtml } from '../bot/outbox.js';
+import { enqueue } from '../bot/outbox.js';
 
 export const SHARE_TEXT =
 	'Привет! Я собираю карту своих друзей и знакомых — она выглядит как звёздное небо, ' +
@@ -94,16 +93,7 @@ export async function linkByToken(
 	await tx.user.update({ where: { id: aId }, data: { degree: { increment: 1 } } });
 	await tx.user.update({ where: { id: bId }, data: { degree: { increment: 1 } } });
 
-	const guest = await tx.user.findUnique({ where: { id: userId } });
-	if (guest) {
-		await enqueue(
-			tx,
-			host.id,
-			'by_link',
-			`🌟 <b>${escapeHtml(displayName(guest))}</b> пришёл(ла) по твоей ссылке — ` +
-				'рядом с твоей звездой загорелась новая.',
-		);
-	}
+	await enqueue(tx, host.id, 'by_link', userId);
 
 	await markLayoutDirty(tx);
 }

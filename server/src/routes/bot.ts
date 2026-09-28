@@ -6,7 +6,7 @@ import { log } from '../lib/log.js';
 import { randomFlame } from '../lib/flame.js';
 import { sanitizeIncoming } from '../lib/names.js';
 import { ensureInviteToken, linkByToken } from '../lib/inviteLink.js';
-import { sendMessage } from '../bot/api.js';
+import { OPEN_MAP_KEYBOARD, sendMessage } from '../bot/api.js';
 import { AVATAR_TTL_MS, scheduleAvatarFetch } from '../avatars/queue.js';
 import { markLayoutDirty } from '../layout/state.js';
 
@@ -94,9 +94,7 @@ export function botRouter(): Router {
 			);
 		}
 
-		void sendMessage(BigInt(chatId), GREETING, {
-			inline_keyboard: [[{ text: '🌌 Открыть карту', web_app: { url: env.publicBaseUrl } }]],
-		}).catch((err) => log.warn({ err }, 'не удалось ответить на /start'));
+		void sendMessage(BigInt(chatId), GREETING, OPEN_MAP_KEYBOARD).catch((err) => log.warn({ err }, 'не удалось ответить на /start'));
 	});
 
 	return router;

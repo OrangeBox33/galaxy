@@ -151,7 +151,7 @@ describe('связи', () => {
 		expect(outbox).toHaveLength(1);
 		expect(outbox[0].userId).toBe(200n);
 		expect(outbox[0].kind).toBe('linked');
-		expect(outbox[0].text).toContain('Аня');
+		expect(outbox[0].actorId).toBe(100n);
 	});
 });
 
@@ -265,7 +265,7 @@ describe('постоянная ссылка', () => {
 		expect(outbox).toHaveLength(1);
 		expect(outbox[0].userId).toBe(100n);
 		expect(outbox[0].kind).toBe('by_link');
-		expect(outbox[0].text).toContain('Гость');
+		expect(outbox[0].actorId).toBe(555n);
 	});
 
 	it('ссылка заблокированного не связывает', async () => {

@@ -20,6 +20,7 @@ enum OutboxStatus {
   QUEUED
   SENT
   FAILED
+  DROPPED // устарело до отправки: связь разорвана или автор заблокирован
 }
 
 model User {
@@ -69,11 +70,17 @@ model User {
   createdAt  DateTime @default(now())
   lastSeenAt DateTime @default(now())
 
+  // Когда бот последний раз писал о чужих действиях: не чаще раза в сутки.
+  lastNotifiedAt DateTime?
+
   linksA Link[] @relation("LinkA")
   linksB Link[] @relation("LinkB")
 
   dismissalsMade SuggestionDismissal[] @relation("DismissalOwner")
   dismissedBy    SuggestionDismissal[] @relation("DismissalTarget")
+
+  outbox      BotOutbox[] @relation("OutboxRecipient")
+  outboxActed BotOutbox[] @relation("OutboxActor")
 
   @@index([isTest])
 }
@@ -107,13 +114,15 @@ model SuggestionDismissal {
   @@index([userId])
 }
 
-// Исходящие сообщения бота. Нужен, потому что отправка может упасть
-// (пользователь не начинал диалог с ботом или заблокировал его).
+// События для уведомлений бота. Текст складывается при отправке: несколько
+// событий за сутки уходят одной сводкой.
 model BotOutbox {
   id        String       @id @default(cuid())
   userId    BigInt
+  user      User         @relation("OutboxRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actorId   BigInt?
+  actor     User?        @relation("OutboxActor", fields: [actorId], references: [id], onDelete: SetNull)
   kind      String // "by_link" | "linked"
-  text      String
   status    OutboxStatus @default(QUEUED)
   attempts  Int          @default(0)
   lastError String?
@@ -121,6 +130,7 @@ model BotOutbox {
   sentAt    DateTime?
 
   @@index([status, createdAt])
+  @@index([userId, status])
 }
 
 model AdminAudit {
