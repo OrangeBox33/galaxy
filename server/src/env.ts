@@ -36,24 +36,12 @@ function num(name: string, fallback?: number): number {
 	return value;
 }
 
-function bigintList(name: string): bigint[] {
-	const raw = process.env[name];
-	if (raw === undefined || raw.trim() === '') return [];
-	return raw
-		.split(',')
-		.map((part) => part.trim())
-		.filter((part) => part !== '')
-		.map((part) => {
-			if (!/^-?\d+$/.test(part)) {
-				fail(`переменная окружения ${name} содержит нечисловой id «${part}»`);
-			}
-			return BigInt(part);
-		});
-}
-
-const adminIds = bigintList('ADMIN_TELEGRAM_IDS');
-if (adminIds.length === 0) {
-	fail('в ADMIN_TELEGRAM_IDS не задано ни одного администратора');
+function telegramId(name: string): bigint {
+	const raw = str(name);
+	if (!/^\d+$/.test(raw)) {
+		fail(`переменная окружения ${name} должна быть telegram id, а не «${raw}»`);
+	}
+	return BigInt(raw);
 }
 
 export const env = Object.freeze({
@@ -64,7 +52,7 @@ export const env = Object.freeze({
 	botUsername: str('TELEGRAM_BOT_USERNAME').replace(/^@/, ''),
 	webhookSecret: str('TELEGRAM_WEBHOOK_SECRET'),
 	sessionSecret: str('SESSION_SECRET'),
-	adminIds,
+	adminId: telegramId('TELEGRAM_ADMIN_ID'),
 	avatarDir: str('AVATAR_DIR'),
 	layoutDebounceMs: num('LAYOUT_RECOMPUTE_DEBOUNCE_MS', 4000),
 	publicDir: process.env.PUBLIC_DIR?.trim() || '',
@@ -72,5 +60,5 @@ export const env = Object.freeze({
 });
 
 export function isAdmin(id: bigint): boolean {
-	return env.adminIds.some((adminId) => adminId === id);
+	return id === env.adminId;
 }

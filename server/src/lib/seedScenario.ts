@@ -26,7 +26,7 @@ const MALE = ['Никита','Паша','Дима','Серёга','Костя','
 const LAST = ['Волков','Орлов','Зимин','Кедров','Морев','Лунин','Соколов','Быстров','Нилов','Гордеев','Шилов','Ясин','Седов','Рогов','Тихонов','Белов','Мушкин','Заров'];
 
 async function main(): Promise<void> {
-	const meId = process.argv[2] ? BigInt(process.argv[2]) : env.adminIds[0];
+	const meId = process.argv[2] ? BigInt(process.argv[2]) : env.adminId;
 	const me = await db.user.findUnique({ where: { id: meId } });
 	if (!me) {
 		throw new Error(`пользователя ${meId} нет в базе — сначала зайдите в приложение`);

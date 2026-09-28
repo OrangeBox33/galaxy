@@ -117,7 +117,7 @@ TELEGRAM_BOT_TOKEN=<токен от BotFather>
 TELEGRAM_BOT_USERNAME=<имя бота без @>
 TELEGRAM_WEBHOOK_SECRET=<openssl rand -hex 32>
 SESSION_SECRET=<openssl rand -hex 32>
-ADMIN_TELEGRAM_IDS=<ваш telegram id>
+TELEGRAM_ADMIN_ID=<ваш telegram id: админ и получатель ошибок>
 AVATAR_DIR=$REMOTE_HOME_DIR/avatars
 LAYOUT_RECOMPUTE_DEBOUNCE_MS=4000
 ENVTPL

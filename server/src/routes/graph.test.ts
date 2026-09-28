@@ -296,7 +296,7 @@ describe('доступ', () => {
 		expect((await call('GET', '/api/admin/users', { as: me })).status).toBe(403);
 	});
 
-	it('админ из ADMIN_TELEGRAM_IDS проходит', async () => {
+	it('админ из TELEGRAM_ADMIN_ID проходит', async () => {
 		const admin = await makeUser(1n, 'Админ');
 		expect((await call('GET', '/api/admin/users', { as: admin })).status).toBe(200);
 	});

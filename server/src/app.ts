@@ -48,7 +48,7 @@ export function createApp(): express.Express {
 	app.use(
 		(
 			err: unknown,
-			_req: express.Request,
+			req: express.Request,
 			res: express.Response,
 			_next: express.NextFunction,
 		): void => {
@@ -62,7 +62,7 @@ export function createApp(): express.Express {
 				});
 				return;
 			}
-			log.error({ err }, 'необработанная ошибка запроса');
+			log.error({ err, method: req.method, path: req.baseUrl + req.path }, 'необработанная ошибка запроса');
 			res.status(500).json({ error: { code: 'internal', message: 'Внутренняя ошибка' } });
 		},
 	);

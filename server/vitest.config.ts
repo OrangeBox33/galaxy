@@ -21,7 +21,7 @@ export default defineConfig({
 			TELEGRAM_BOT_USERNAME: 'test_bot',
 			TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret',
 			SESSION_SECRET: 'test-session-secret',
-			ADMIN_TELEGRAM_IDS: '1',
+			TELEGRAM_ADMIN_ID: '1',
 			AVATAR_DIR: '/tmp/galaxy-test-avatars',
 			LAYOUT_RECOMPUTE_DEBOUNCE_MS: '4000',
 		},

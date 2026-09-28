@@ -1,7 +1,7 @@
 // Авторизация запросов по сессионной куке. Проверка прав — на сервере и отдельно
 // на каждом маршруте: клиентское «не показывать кнопку» защитой не считается.
 import type { NextFunction, Request, Response } from 'express';
-import { env, isAdmin } from '../env.js';
+import { isAdmin } from '../env.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { readSession } from './session.js';
 import { db } from '../db.js';
@@ -60,8 +60,4 @@ export function requireAdmin(req: Request, _res: Response, next: NextFunction): 
 		return;
 	}
 	next();
-}
-
-export function adminIds(): bigint[] {
-	return [...env.adminIds];
 }
