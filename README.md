@@ -156,7 +156,7 @@ LAYOUT_RECOMPUTE_DEBOUNCE_MS=4000
 | `deploy/nginx.galaxy-http.conf` | `/etc/nginx/conf.d/galaxy.conf` — зоны лимитов |
 
 Сайт `nikitosfrolov.ru` (домен, TLS, `include snippets/nikitosfrolov/*.conf;`) живёт
-в репо `nikitosfrolov`. Старый адрес `kvadratnikitosa.ru/galaxy/...` отдаёт 308 на новый.
+в `/etc/nginx/sites-available/nikitosfrolov.ru` на сервере. Старый адрес `kvadratnikitosa.ru/galaxy/...` отдаёт 308 на новый.
 Важное:
 
 - `proxy_pass http://127.0.0.1:3005;` **без завершающего слеша** — так nginx передаёт

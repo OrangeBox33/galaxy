@@ -39,7 +39,7 @@ REMOTE_DIR="${GALAXY_REMOTE_DIR:-/root/dev/galaxy/dist}"
 REMOTE_HOME_DIR="$(dirname "$REMOTE_DIR")"
 APP_NAME="galaxy"
 PUBLIC_URL="https://nikitosfrolov.ru/galaxy"
-# Сайт nikitosfrolov.ru подключает все *.conf из этой папки (репо nikitosfrolov).
+# Сайт nikitosfrolov.ru подключает все *.conf из этой папки.
 NGINX_SNIPPET="/etc/nginx/snippets/nikitosfrolov/galaxy.conf"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
