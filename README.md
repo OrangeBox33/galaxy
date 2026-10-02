@@ -5,7 +5,7 @@
 его звезда к центру карты.
 
 Вход только через Telegram Mini App; id пользователя в системе равен его Telegram id.
-Адрес: <https://kvadratnikitosa.ru/galaxy>
+Адрес: <https://nikitosfrolov.ru/galaxy>
 
 ## Устройство
 
@@ -90,7 +90,7 @@ npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma 
 ## Сервер
 
 VPS `root@193.124.203.221`, Ubuntu 20.04. Рядом живут два чужих проекта, которые мы
-не трогаем: `kvadrat` (порт 3500, корень домена) и `textbin` (порт 8090, `/bankiru`).
+не трогаем: `kvadrat` (порт 3500, корень домена) и `textbin` (порт 8090, `/textbin`).
 Наш процесс — `galaxy` на порту 3005.
 
 Node и pm2 поставлены через nvm, а неинтерактивный ssh не читает профиль, поэтому
@@ -131,7 +131,7 @@ PostgreSQL ставится **из архива PGDG** (`apt-archive.postgresql.
 ```
 DATABASE_URL=postgresql://galaxy:<пароль>@127.0.0.1:5432/galaxy
 PORT=3005
-PUBLIC_BASE_URL=https://kvadratnikitosa.ru/galaxy
+PUBLIC_BASE_URL=https://nikitosfrolov.ru/galaxy
 TELEGRAM_BOT_TOKEN=<токен от BotFather>
 TELEGRAM_BOT_USERNAME=<имя бота без @>
 TELEGRAM_WEBHOOK_SECRET=<openssl rand -hex 32>
@@ -146,8 +146,18 @@ LAYOUT_RECOMPUTE_DEBOUNCE_MS=4000
 
 ### nginx
 
-Фрагмент лежит в `deploy/nginx.galaxy.conf` и уже вставлен в
-`/etc/nginx/sites-available/kvadratnikitosa.ru`. Важное:
+`./deploy.sh --nginx` ставит три файла, проверяет `nginx -t` и перечитывает конфиг
+(при ошибке всё откатывает):
+
+| в репо | на сервере |
+| --- | --- |
+| `deploy/nginx.galaxy.conf` | `/etc/nginx/snippets/nikitosfrolov/galaxy.conf` — location'ы |
+| `deploy/nginx.galaxy-proxy.conf` | `/etc/nginx/snippets/galaxy-proxy.conf` |
+| `deploy/nginx.galaxy-http.conf` | `/etc/nginx/conf.d/galaxy.conf` — зоны лимитов |
+
+Сайт `nikitosfrolov.ru` (домен, TLS, `include snippets/nikitosfrolov/*.conf;`) живёт
+в репо `nikitosfrolov`. Старый адрес `kvadratnikitosa.ru/galaxy/...` отдаёт 308 на новый.
+Важное:
 
 - `proxy_pass http://127.0.0.1:3005;` **без завершающего слеша** — так nginx передаёт
   исходный URI целиком, вместе с префиксом `/galaxy`, которого и ждёт Express.
@@ -159,13 +169,13 @@ LAYOUT_RECOMPUTE_DEBOUNCE_MS=4000
 ### Telegram
 
 ```bash
-cd server && npm run setup:bot
+./deploy.sh --bot
 ```
 
 Скрипт ставит вебхук на `<PUBLIC_BASE_URL>/tg/webhook/<TELEGRAM_WEBHOOK_SECRET>`
 и показывает, что об этом думает Telegram. Отдельно, руками в BotFather:
 `/mybots` → бот → **Bot Settings → Configure Mini App → Enable**, URL
-`https://kvadratnikitosa.ru/galaxy`. Без включённого Mini App ссылки-приглашения
+`https://nikitosfrolov.ru/galaxy`. Без включённого Mini App ссылки-приглашения
 вида `t.me/<бот>?startapp=<токен>` не сработают.
 
 ## Деплой
@@ -174,6 +184,8 @@ cd server && npm run setup:bot
 ./deploy.sh              собрать клиент и сервер, залить, накатить миграции, перезапустить
 ./deploy.sh --setup      разовая настройка сервера
 ./deploy.sh --migrate    только миграции
+./deploy.sh --nginx      location /galaxy/ и лимиты в nginx
+./deploy.sh --bot        перерегистрировать вебхук Telegram
 ./deploy.sh --logs       живые логи
 ./deploy.sh --status     что крутится на сервере
 ./deploy.sh --restart    перезапуск без сборки

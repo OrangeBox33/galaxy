@@ -5,6 +5,8 @@
 #   ./deploy.sh              собрать клиент + сервер, залить, накатить миграции, перезапустить
 #   ./deploy.sh --setup      разовая настройка: pm2, автозапуск, PostgreSQL, каталог avatars, крон бэкапа
 #   ./deploy.sh --migrate    только накатить миграции
+#   ./deploy.sh --nginx      поставить/обновить location /galaxy/ и лимиты в nginx (nikitosfrolov.ru)
+#   ./deploy.sh --bot        перерегистрировать вебхук Telegram на PUBLIC_BASE_URL из .env сервера
 #   ./deploy.sh --logs       живые логи (pm2 logs)
 #   ./deploy.sh --status     что крутится на сервере
 #   ./deploy.sh --restart    перезапустить, ничего не собирая
@@ -36,7 +38,9 @@ REMOTE="${GALAXY_REMOTE:-root@193.124.203.221}"
 REMOTE_DIR="${GALAXY_REMOTE_DIR:-/root/dev/galaxy/dist}"
 REMOTE_HOME_DIR="$(dirname "$REMOTE_DIR")"
 APP_NAME="galaxy"
-PUBLIC_URL="https://kvadratnikitosa.ru/galaxy"
+PUBLIC_URL="https://nikitosfrolov.ru/galaxy"
+# Сайт nikitosfrolov.ru подключает все *.conf из этой папки (репо nikitosfrolov).
+NGINX_SNIPPET="/etc/nginx/snippets/nikitosfrolov/galaxy.conf"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STAGE="$ROOT/.deploy"
@@ -65,6 +69,8 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 		--setup) MODE="setup" ;;
 		--migrate) MODE="migrate" ;;
+		--nginx) MODE="nginx" ;;
+		--bot) MODE="bot" ;;
 		--logs) MODE="logs" ;;
 		--status) MODE="status" ;;
 		--restart) MODE="restart" ;;
@@ -73,7 +79,7 @@ while [ $# -gt 0 ]; do
 		--full) HEAVY="full" ;;
 		--dry-run) DRY_RUN=1 ;;
 		-h | --help)
-			sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+			sed -n '2,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 			exit 0
 			;;
 		*) die "неизвестный аргумент: $1" ;;
@@ -125,6 +131,42 @@ ENVTPL
 	exit 0
 fi
 
+# ── Nginx ──────────────────────────────────────────────────────────────────
+# Три файла: location'ы — в папку, которую подключает сайт nikitosfrolov.ru,
+# общий proxy-фрагмент — в snippets, зоны лимитов — в conf.d (контекст http).
+# Если nginx -t не прошёл, все три возвращаются к прежнему виду.
+if [ "$MODE" = "nginx" ]; then
+	say "Nginx: location /galaxy/ и лимиты"
+	scp -q "$ROOT/deploy/nginx.galaxy.conf" "$ROOT/deploy/nginx.galaxy-proxy.conf" \
+		"$ROOT/deploy/nginx.galaxy-http.conf" "$REMOTE:/tmp/"
+	ssh "$REMOTE" bash -s -- "$NGINX_SNIPPET" <<'REMOTE_SH'
+set -e
+PAIRS="nginx.galaxy.conf:$1
+nginx.galaxy-proxy.conf:/etc/nginx/snippets/galaxy-proxy.conf
+nginx.galaxy-http.conf:/etc/nginx/conf.d/galaxy.conf"
+BAK=/tmp/galaxy-nginx-bak
+rm -rf "$BAK" && mkdir -p "$BAK"
+for pair in $PAIRS; do
+	src=${pair%%:*} dst=${pair#*:}
+	[ -f "$dst" ] && cp "$dst" "$BAK/$src"
+	mkdir -p "$(dirname "$dst")" && mv "/tmp/$src" "$dst"
+	echo "    $dst"
+done
+if nginx -t 2>/tmp/galaxy-nginx-t.log; then
+	systemctl reload nginx && echo '    nginx -t ок, конфиг перечитан'
+else
+	cat /tmp/galaxy-nginx-t.log
+	for pair in $PAIRS; do
+		src=${pair%%:*} dst=${pair#*:}
+		if [ -f "$BAK/$src" ]; then cp "$BAK/$src" "$dst"; else rm -f "$dst"; fi
+	done
+	echo '    nginx -t не прошёл — файлы откачены'
+	exit 1
+fi
+REMOTE_SH
+	exit 0
+fi
+
 if [ "$MODE" = "logs" ]; then
 	say "Логи $APP_NAME (Ctrl+C чтобы выйти)"
 	# -t: интерактивный tty, иначе Ctrl+C не дойдёт до pm2
@@ -140,6 +182,13 @@ fi
 if [ "$MODE" = "restart" ]; then
 	say "Перезапускаю $APP_NAME"
 	remote "cd $REMOTE_DIR && pm2 startOrRestart ecosystem.config.cjs --update-env && pm2 list"
+	exit 0
+fi
+
+# Скрипт читает .env из рабочей папки, поэтому запускаем его на сервере, в dist.
+if [ "$MODE" = "bot" ]; then
+	say "Перерегистрирую вебхук Telegram"
+	remote "cd $REMOTE_DIR && node server/src/bot/setup.js"
 	exit 0
 fi
 
