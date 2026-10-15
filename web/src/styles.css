@@ -1,4 +1,6 @@
 :root {
+	--top-pad: max(12px, calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 8px), env(safe-area-inset-top));
+
 	color-scheme: dark;
 	--sky-top: #04060e;
 	--sky-mid: #0a0e1c;
@@ -85,9 +87,15 @@ button {
 	touch-action: none;
 }
 
+@media (pointer: coarse) {
+	:root {
+		--top-pad: max(48px, calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 8px), env(safe-area-inset-top));
+	}
+}
+
 .sky__top {
 	position: absolute;
-	top: max(12px, env(safe-area-inset-top));
+	top: var(--top-pad);
 	left: 12px;
 	display: flex;
 	gap: 8px;
@@ -627,7 +635,7 @@ button {
    иначе «Связать» и «Нет» не помещаются в строку и правый край обрезается. */
 .suggest {
 	position: absolute;
-	top: max(12px, env(safe-area-inset-top));
+	top: var(--top-pad);
 	right: 8px;
 	width: min(40vw, 230px);
 	min-width: 150px;
