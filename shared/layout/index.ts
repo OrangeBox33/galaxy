@@ -2,7 +2,7 @@
 // не совпадут: стандарт JavaScript не фиксирует точность sin и cos. Истина
 // серверная, клиентская раскладка — лишь предсказание.
 import { computeCentrality } from './centrality.js';
-import { findClusters } from './clusters.js';
+import { CLUSTER_ITERATIONS, findClusters } from './clusters.js';
 import { centerByMass, percentileScale } from './normalize.js';
 import { resolveParams, starRadius, type LayoutOverrides, type LayoutParams } from './params.js';
 import { applyTransform, bestTransform, type Pair } from './procrustes.js';
@@ -24,7 +24,6 @@ const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 // Шаг спирали, которой ищется место новой звезде, и зазор до соседей.
 const NEW_NODE_STEP = 26;
 const NEW_NODE_GAP = 6;
-const CLUSTER_ITERATIONS = 24;
 
 export type LayoutInput = {
 	// Стабильный порядок (обычно по id): от него зависит воспроизводимость.

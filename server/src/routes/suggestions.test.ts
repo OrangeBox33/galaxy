@@ -5,7 +5,7 @@ import type { Server } from 'node:http';
 import jwt from 'jsonwebtoken';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { BASE_PATH, SESSION_COOKIE } from '../../../shared/config.js';
-import { suggestFriends, type SuggestNode } from '../../../shared/suggest.js';
+import { suggestFriends, suggestHubs, type SuggestNode } from '../../../shared/suggest.js';
 import { createApp } from '../app.js';
 import { db } from '../db.js';
 
@@ -59,6 +59,42 @@ describe('кого предложить', () => {
 
 	it('у одиночки предлагать нечего', () => {
 		expect(suggestFriends({ me: '6', nodes, edges }, new Set())).toEqual([]);
+	});
+});
+
+describe('добивка самыми связными', () => {
+	// Три компании без мостиков: я (1) знаю только 2 из первой; во второй
+	// центр 7, в третьей — 11. 15 ни с кем не связан.
+	const edges: [string, string][] = [
+		['1', '2'],
+		['2', '3'],
+		['3', '4'],
+		['3', '5'],
+		['2', '4'],
+		['6', '7'],
+		['7', '8'],
+		['7', '9'],
+		['8', '9'],
+		['10', '11'],
+		['11', '12'],
+	];
+	const ids = Array.from({ length: 15 }, (_, i) => String(i + 1));
+	const nodes: SuggestNode[] = ids.map((id) => ({
+		id,
+		degree: edges.filter(([a, b]) => a === id || b === id).length,
+		isBlocked: false,
+	}));
+
+	it('по одному из каждой компании, связные выше, одиночек нет', () => {
+		const out = suggestHubs({ me: '1', nodes, edges }, new Set());
+
+		expect(out.map((node) => node.id)).toEqual(['3', '7', '11']);
+	});
+
+	it('отказ уступает место следующему в той же компании', () => {
+		const out = suggestHubs({ me: '1', nodes, edges }, new Set(['3', '7']));
+
+		expect(out.map((node) => node.id)).toEqual(['11', '4', '8']);
 	});
 });
 

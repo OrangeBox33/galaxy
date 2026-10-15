@@ -3,6 +3,8 @@
 // поэтому подсказки пересчитываются сразу после своего же «Связать»,
 // не дожидаясь сервера. Стоит это суммы степеней моих друзей.
 
+import { CLUSTER_ITERATIONS, findClusters } from './layout/clusters.js';
+
 // Единицы мало: один общий друг — это почти любой встречный, и окно
 // заполнялось бы случайными людьми.
 export const MIN_MUTUAL = 2;
@@ -64,4 +66,42 @@ export function suggestFriends<T extends SuggestNode>(
 			(x.node.id < y.node.id ? -1 : x.node.id > y.node.id ? 1 : 0),
 	);
 	return out;
+}
+
+// Добивка, когда друзей друзей не хватает: самый связный незнакомец из каждой
+// компании, по одному на компанию, чтобы не предлагать троих из одной.
+// Одиночек без связей не предлагаем: знакомить с ними некому.
+export function suggestHubs<T extends SuggestNode>(
+	graph: SuggestGraph<T>,
+	dismissed: ReadonlySet<string>,
+): T[] {
+	// Метки сообществ зависят от порядка узлов, а /api/graph отдаёт его
+	// произвольным: без сортировки компании перекраивались бы на каждом опросе.
+	const nodes = [...graph.nodes].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+	const index = new Map(nodes.map((node, i) => [node.id, i]));
+	const neighbours: number[][] = nodes.map(() => []);
+	const mine = new Set<string>();
+	for (const [a, b] of graph.edges) {
+		const i = index.get(a);
+		const j = index.get(b);
+		if (i === undefined || j === undefined) continue;
+		neighbours[i].push(j);
+		neighbours[j].push(i);
+		if (a === graph.me) mine.add(b);
+		if (b === graph.me) mine.add(a);
+	}
+	for (const list of neighbours) list.sort((x, y) => x - y);
+
+	const { cluster } = findClusters(neighbours, CLUSTER_ITERATIONS);
+	const best = new Map<number, T>();
+	nodes.forEach((node, i) => {
+		if (node.id === graph.me || mine.has(node.id) || node.isBlocked || dismissed.has(node.id)) return;
+		if (node.degree === 0) return;
+		const held = best.get(cluster[i]);
+		if (!held || node.degree > held.degree) best.set(cluster[i], node);
+	});
+
+	return [...best.values()].sort(
+		(x, y) => y.degree - x.degree || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0),
+	);
 }

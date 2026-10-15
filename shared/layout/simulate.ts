@@ -1,5 +1,5 @@
 // Симуляция звёздной системы (раздел 7.2–7.5). Центр C зафиксирован в (0,0).
-import { findClusters, type Clusters } from './clusters.js';
+import { CLUSTER_ITERATIONS, findClusters, type Clusters } from './clusters.js';
 import {
 	LAYOUT_PARAMS,
 	resolveParams,
@@ -53,7 +53,6 @@ const GROUP_D_MIN = 120;
 const L_MASS = 0.18;
 const SEPARATION_GAP = 6;
 // Потолок проходов label propagation: обычно сходится за пять-шесть.
-const CLUSTER_ITERATIONS = 24;
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 

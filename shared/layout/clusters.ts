@@ -21,6 +21,8 @@ export type Clusters = {
 	localCentrality: number[];
 };
 
+export const CLUSTER_ITERATIONS = 24;
+
 export function findClusters(neighbours: number[][], iterations: number): Clusters {
 	const n = neighbours.length;
 	const component = components(neighbours, n);

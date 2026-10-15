@@ -5,11 +5,11 @@
 // держит своё место до конца анимации — иначе взрыв подсветит подъехавшую снизу соседку.
 // Карточка живёт своей копией данных: по текущему списку кандидатов она исчезала бы
 // под пальцем, когда своя же новая связь роняет у соседей число общих друзей.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Gender } from '../../../shared/config';
 import { playLink } from '../sound';
 import { useStore } from '../store';
-import { suggestFriends } from '../../../shared/suggest';
+import { suggestFriends, suggestHubs } from '../../../shared/suggest';
 import { Avatar } from './Avatar';
 import { haptic } from '../telegram/webapp';
 
@@ -34,13 +34,16 @@ type Row = {
 	name: string;
 	avatar: string | null;
 	gender: Gender;
+	// Добивка из самых связных: всегда ниже друзей друзей.
+	hub?: boolean;
 	// Пока заполнено — карточка догорает, но место в стопке ещё держит.
 	exit?: Exit;
 };
 
 function same(a: Row[], b: Row[]): boolean {
 	return (
-		a.length === b.length && a.every((row, i) => row.id === b[i].id && row.exit === b[i].exit)
+		a.length === b.length &&
+		a.every((row, i) => row.id === b[i].id && row.exit === b[i].exit && row.hub === b[i].hub)
 	);
 }
 
@@ -119,6 +122,7 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 
 	const [rows, setRows] = useState<Row[]>([]);
 	const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+	const leaving = useRef(new Set<string>());
 
 	useEffect(
 		() => () => {
@@ -129,6 +133,11 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 
 	const dismissed = new Set<string>([...(graph?.dismissed ?? []), ...dismissedLocal]);
 	const ranked = graph ? suggestFriends(graph, dismissed) : [];
+	const hubs = useMemo(
+		() =>
+			graph ? suggestHubs(graph, new Set([...(graph.dismissed ?? []), ...dismissedLocal])) : [],
+		[graph, dismissedLocal],
+	);
 	const nodes = new Map((graph?.nodes ?? []).map((node) => [node.id, node]));
 
 	const friends = new Set<string>();
@@ -149,14 +158,39 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 		return node ? { ...row, name: node.name, avatar: node.avatar, gender: node.gender } : row;
 	}
 
-	// Догорающие карточки место занимают: новая прилетит не раньше, чем старая исчезнет.
+	// Догорающие карточки место занимают и не сдвигаются: новая прилетит
+	// не раньше, чем старая исчезнет. Друг друга, нашедшийся позже, встаёт выше
+	// хабов, а лишний хаб угасает.
 	function fill(current: Row[]): Row[] {
-		const next = current.filter(keep);
-		for (const item of ranked) {
-			if (next.length >= VISIBLE) break;
-			const { node } = item;
-			if (next.some((row) => row.id === node.id)) continue;
-			next.push({ id: node.id, name: node.name, avatar: node.avatar, gender: node.gender });
+		const mains = new Set(ranked.map(({ node }) => node.id));
+		const shown = new Set(current.map((row) => row.id));
+		const live = current
+			.filter((row) => !row.exit && keep(row))
+			.map((row) => (row.hub && mains.has(row.id) ? { ...row, hub: false } : row));
+		const row = (node: (typeof hubs)[number], hub: boolean): Row => ({
+			id: node.id,
+			name: node.name,
+			avatar: node.avatar,
+			gender: node.gender,
+			hub,
+		});
+
+		const order = [
+			...live.filter((item) => !item.hub),
+			...ranked.filter(({ node }) => !shown.has(node.id)).map(({ node }) => row(node, false)),
+			...live.filter((item) => item.hub),
+			...hubs
+				.filter((node) => !shown.has(node.id) && !mains.has(node.id))
+				.map((node) => row(node, true)),
+		];
+
+		const exiting = current.filter((item) => item.exit).length;
+		const next = order.slice(0, Math.max(0, VISIBLE - exiting));
+		current.forEach((item, i) => {
+			if (item.exit) next.splice(i, 0, item);
+		});
+		for (const item of order.slice(next.length - exiting)) {
+			if (shown.has(item.id)) next.push({ ...item, exit: { mode: 'fade', fx: '50%', fy: '50%' } });
 		}
 		return next;
 	}
@@ -168,6 +202,22 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 		});
 		// Без зависимостей: setRows вернёт прежний массив, если ничего не изменилось.
 	});
+
+	useEffect(() => {
+		for (const row of rows) {
+			if (!row.exit || leaving.current.has(row.id)) continue;
+			leaving.current.add(row.id);
+			timers.current.push(
+				setTimeout(
+					() => {
+						leaving.current.delete(row.id);
+						setRows((current) => current.filter((item) => item.id !== row.id));
+					},
+					row.exit.mode === 'burst' ? BURST_MS : FADE_MS,
+				),
+			);
+		}
+	}, [rows]);
 
 	function leave(row: Row, mode: Exit['mode'], event: React.MouseEvent<HTMLButtonElement>) {
 		if (row.exit) return;
@@ -190,12 +240,6 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 
 		setRows((current) =>
 			current.map((item) => (item.id === row.id ? { ...item, exit } : item)),
-		);
-		timers.current.push(
-			setTimeout(
-				() => setRows((current) => current.filter((item) => item.id !== row.id)),
-				mode === 'burst' ? BURST_MS : FADE_MS,
-			),
 		);
 	}
 
