@@ -5,7 +5,7 @@ import { normalizePair } from '../lib/pair.js';
 import { OPEN_MAP_KEYBOARD, sendMessage, type TelegramError } from './api.js';
 import { composeMessage, type OutboxEvent } from './outbox.js';
 
-const TICK_MS = 5000;
+const TICK_MS = 10 * 60 * 1000;
 const BATCH = 20;
 const MAX_ATTEMPTS = 3;
 
@@ -14,9 +14,6 @@ export const NOTIFY_INTERVAL_MS = 24 * 60 * 60 * 1000;
 // Пишем только с 10:00 до полуночи по Москве; перевода часов там нет, всегда UTC+3.
 const MSK_OFFSET_H = 3;
 const DAY_START_MSK_H = 10;
-
-// Пауза между попытками растёт экспоненциально; в памяти — процесс всё равно один.
-const nextAttemptAt = new Map<bigint, number>();
 
 export function startOutboxWorker(): void {
 	const timer = setInterval(() => {
@@ -45,10 +42,7 @@ export async function tick(now = new Date()): Promise<void> {
 			take: BATCH,
 		});
 
-		for (const { id } of recipients) {
-			if ((nextAttemptAt.get(id) ?? 0) > now.getTime()) continue;
-			await deliver(id, now);
-		}
+		for (const { id } of recipients) await deliver(id, now);
 	} catch (err) {
 		log.error({ err }, 'воркер рассылки упал на итерации');
 	}
@@ -90,7 +84,6 @@ async function deliver(userId: bigint, now: Date): Promise<void> {
 
 	try {
 		await sendMessage(userId, composeMessage(events), OPEN_MAP_KEYBOARD);
-		nextAttemptAt.delete(userId);
 		await db.$transaction([
 			db.botOutbox.updateMany({
 				where: { id: { in: kept } },
@@ -113,13 +106,10 @@ async function deliver(userId: bigint, now: Date): Promise<void> {
 		});
 
 		if (giveUp) {
-			nextAttemptAt.delete(userId);
 			log.warn(
 				{ userId: String(userId), events: kept.length, err: error.message },
 				'сообщение не доставлено',
 			);
-		} else {
-			nextAttemptAt.set(userId, now.getTime() + TICK_MS * 2 ** attempts);
 		}
 	}
 }
