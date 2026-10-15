@@ -87,18 +87,24 @@ button {
 	touch-action: none;
 }
 
+.sky__top {
+	position: absolute;
+	/* В полноэкранном десктопном Telegram шапка сообщает вставку ~59 px, но слева
+	   ничего не рисует. */
+	top: 12px;
+	left: 12px;
+	display: flex;
+	gap: 8px;
+}
+
 @media (pointer: coarse) {
 	:root {
 		--top-pad: max(48px, calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 8px), env(safe-area-inset-top));
 	}
-}
 
-.sky__top {
-	position: absolute;
-	top: var(--top-pad);
-	left: 12px;
-	display: flex;
-	gap: 8px;
+	.sky__top {
+		top: var(--top-pad);
+	}
 }
 
 .sky__tools {
