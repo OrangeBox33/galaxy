@@ -9,6 +9,7 @@ import { ensureInviteToken, linkByToken } from '../lib/inviteLink.js';
 import { OPEN_MAP_KEYBOARD, sendMessage } from '../bot/api.js';
 import { AVATAR_TTL_MS, scheduleAvatarFetch } from '../avatars/queue.js';
 import { markLayoutDirty } from '../layout/state.js';
+import { type ForwardOrigin, seedFriend } from '../lib/seedFriend.js';
 
 function secretMatches(candidate: string): boolean {
 	const a = Buffer.from(candidate);
@@ -64,25 +65,12 @@ async function welcome(from: From, token: string): Promise<void> {
 	if (stale) scheduleAvatarFetch(user.id, null);
 }
 
-type Message = Record<string, unknown> & {
+type Message = {
 	text?: string;
 	chat?: { id?: number };
 	from?: From;
+	forward_origin?: ForwardOrigin;
 };
-
-// Разведка под холодный старт: что Telegram отдаёт о человеке, если переслать
-// боту его сообщение. Видит только админ.
-function forwardReport(message: Message): string | null {
-	const fields = Object.fromEntries(
-		Object.entries(message).filter(([key]) => key.startsWith('forward_') || key === 'contact'),
-	);
-	if (Object.keys(fields).length === 0) return null;
-	const json = JSON.stringify(fields, null, 2)
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;');
-	return `<pre>${json}</pre>`;
-}
 
 export function botRouter(): Router {
 	const router = Router();
@@ -103,11 +91,11 @@ export function botRouter(): Router {
 		if (!chatId) return;
 
 		if (from?.id && isAdmin(BigInt(from.id))) {
-			const report = forwardReport(message!);
-			if (report) {
-				void sendMessage(BigInt(chatId), report).catch((err) =>
-					log.warn({ err }, 'не удалось разобрать пересланное'),
-				);
+			const origin = message!.forward_origin;
+			if (origin) {
+				void seedFriend(BigInt(from.id), origin)
+					.then((reply) => sendMessage(BigInt(chatId), reply))
+					.catch((err) => log.error({ err }, 'не удалось завести пересланного'));
 				return;
 			}
 		}
