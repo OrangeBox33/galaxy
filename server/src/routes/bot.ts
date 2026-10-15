@@ -19,8 +19,12 @@ function secretMatches(candidate: string): boolean {
 }
 
 const GREETING =
-	'Привет! Это карта знакомств: звёздное небо, где каждый человек — звезда, ' +
-	'а знакомства — линии между ними.\n\nОткрой карту и найди свою звезду.';
+	'Привет!😉\n' +
+	'Это динамическая карта звёздного неба, где каждый человек — звезда, ' +
+	'а знакомства — линии между ними.\n\n' +
+	'Хочется, чтобы получилось красиво! - это центральная идея✨\n' +
+	'Посмотреть каким окажется живой граф через месяц, через год...\n\n' +
+	'Группа друзей образует кластер. Добавь своих друзей и создай собственный ;)';
 
 type From = {
 	id?: number;
@@ -112,7 +116,9 @@ export function botRouter(): Router {
 			);
 		}
 
-		void sendMessage(BigInt(chatId), GREETING, OPEN_MAP_KEYBOARD).catch((err) => log.warn({ err }, 'не удалось ответить на /start'));
+		void sendMessage(BigInt(chatId), GREETING, OPEN_MAP_KEYBOARD).catch((err) =>
+			log.warn({ err }, 'не удалось ответить на /start'),
+		);
 	});
 
 	return router;
