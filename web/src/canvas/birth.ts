@@ -79,7 +79,7 @@ export function birthStar(t: number): BirthStar {
 	if (t < T.gather) {
 		return {
 			scale: 0.05 + 0.1 * span(t, T.gather * 0.5, T.gather),
-			alpha: 0.35 * span(t, 0.1, T.gather),
+			alpha: 0,
 			warmth: T.warm * (1 - span(t, 0.2, T.gather)),
 		};
 	}

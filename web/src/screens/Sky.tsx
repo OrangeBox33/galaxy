@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { GRAPH_POLL_MS } from '../../../shared/config';
+import { starRadius } from '../../../shared/layout/params';
 import { me as meApi } from '../api/endpoints';
 import { playBirth, playClick } from '../sound';
 import { useStore } from '../store';
@@ -14,7 +15,7 @@ import { haptic } from '../telegram/webapp';
 // зума задан в camera.ts, туда и упираемся.
 const BIRTH_FLY_MS = 900;
 const BIRTH_PAUSE_MS = 250;
-const BIRTH_ZOOM = 16;
+const BIRTH_RADIUS_PX = 64;
 // Окно цветов занимает низ экрана: поднимаем звезду над ним, иначе красить
 // будет нечего — она окажется ровно на кромке панели.
 const COLORS_SHIFT = 0.22;
@@ -68,7 +69,14 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 
 			const renderer = rendererRef.current;
 			if (renderer) {
-				renderer.camera.flyTo(spot.x, spot.y, BIRTH_ZOOM, BIRTH_FLY_MS);
+				const degree =
+					useStore.getState().graph?.nodes.find((item) => item.id === id)?.degree ?? 1;
+				renderer.camera.flyTo(
+					spot.x,
+					spot.y,
+					BIRTH_RADIUS_PX / starRadius(degree),
+					BIRTH_FLY_MS,
+				);
 				await new Promise((done) => setTimeout(done, BIRTH_FLY_MS + BIRTH_PAUSE_MS));
 				// Звук сам отмеряет до вспышки по birthTuning, поэтому зовётся вплотную к ignite.
 				playBirth(
