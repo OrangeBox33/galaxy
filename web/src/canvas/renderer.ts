@@ -628,7 +628,7 @@ export function createRenderer(
 			const pa = project(a, now);
 			const pb = project(b, now);
 			const alpha = tuning.constellation.alpha * shown * easeInOutCubic(level);
-			ctx.strokeStyle = linkGradient(pa.sx, pa.sy, pb.sx, pb.sy, a, b, alpha);
+			ctx.strokeStyle = rgba(CORE_RGB, alpha);
 			ctx.beginPath();
 			ctx.moveTo(pa.sx, pa.sy);
 			ctx.lineTo(pb.sx, pb.sy);
