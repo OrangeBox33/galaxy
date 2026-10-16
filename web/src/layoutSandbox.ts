@@ -352,7 +352,7 @@ const panel = createLayoutPanel({
 			bag: tuning.constellation as unknown as Bag,
 			controls: [
 				range('alpha', 'яркость', 0, 1, 0.01),
-				range('reach', 'предел длины линии, в соседних расстояниях', 1, 30, 0.5),
+				range('reach', 'предел длины линии, в соседних расстояниях, 0 — без предела', 0, 30, 0.5),
 				range('maxDegree', 'линий у звезды, 0 — без ограничения', 0, 6, 1),
 				range('maxSize', 'звёзд в созвездии, 0 — без ограничения', 0, 60, 1),
 			],

@@ -1,10 +1,9 @@
-// Рисунок созвездий: кратчайшее связывающее дерево по положению звёзд на небе,
-// к знакомствам отношения не имеет.
+// Рисунок созвездий: кратчайшее по длине на небе связывающее дерево из знакомств.
 
 export type ConstellationPoint = { id: string; x: number; y: number; radius: number };
 
 export type ConstellationLimits = {
-	reach: number; // предел длины линии в медианах расстояния до ближайшего соседа
+	reach: number; // предел длины линии в медианах расстояния до ближайшего соседа, 0 — без предела
 	maxDegree: number; // 0 — без ограничения
 	maxSize: number; // звёзд в одном созвездии, 0 — без ограничения
 };
@@ -85,22 +84,24 @@ function grazes(a: ConstellationPoint, b: ConstellationPoint, star: Constellatio
 
 export function buildConstellation(
 	input: ConstellationPoint[],
+	friendships: [string, string][],
 	limits: ConstellationLimits,
 ): [string, string][] {
 	if (input.length < 2) return [];
 	// По id, а не в порядке прихода: /api/graph отдаёт узлы как попало, рисунок прыгал бы.
 	const points = [...input].sort((p, q) => (p.id < q.id ? -1 : p.id > q.id ? 1 : 0));
-	const limit = Math.max(1, medianNearest(points) * limits.reach);
-	const grid = gridOf(points, limit);
+	const index = new Map(points.map((point, i) => [point.id, i]));
+	const limit = limits.reach > 0 ? medianNearest(points) * limits.reach : Infinity;
 
 	const pairs: { i: number; j: number; d: number }[] = [];
-	points.forEach((point, i) => {
-		forNear(grid, point, (j) => {
-			if (j <= i) return;
-			const d = Math.hypot(points[j].x - point.x, points[j].y - point.y);
-			if (d <= limit) pairs.push({ i, j, d });
-		});
-	});
+	for (const [aId, bId] of friendships) {
+		const a = index.get(aId);
+		const b = index.get(bId);
+		if (a === undefined || b === undefined || a === b) continue;
+		const [i, j] = a < b ? [a, b] : [b, a];
+		const d = Math.hypot(points[j].x - points[i].x, points[j].y - points[i].y);
+		if (d <= limit) pairs.push({ i, j, d });
+	}
 	pairs.sort((p, q) => p.d - q.d || p.i - q.i || p.j - q.j);
 
 	const parent = points.map((_, i) => i);
@@ -117,27 +118,34 @@ export function buildConstellation(
 	const maxSize = limits.maxSize > 0 ? limits.maxSize : Infinity;
 
 	const chosen: [number, number][] = [];
-	for (const { i, j } of pairs) {
+	const fits = (i: number, j: number): boolean =>
+		root(i) !== root(j) &&
+		degree[i] < maxDegree &&
+		degree[j] < maxDegree &&
+		size[root(i)] + size[root(j)] <= maxSize;
+	const join = (i: number, j: number): void => {
 		const ri = root(i);
 		const rj = root(j);
-		if (ri === rj) continue;
-		if (degree[i] >= maxDegree || degree[j] >= maxDegree) continue;
-		if (size[ri] + size[rj] > maxSize) continue;
-		const a = points[i];
-		const b = points[j];
-		// Без ограничений дерево само себя не пересекает; с ними обходные линии могут.
-		if (chosen.some(([k, l]) => crosses(a, b, points[k], points[l]))) continue;
-		let blocked = false;
-		forNear(grid, a, (k) => {
-			if (!blocked && k !== i && k !== j && grazes(a, b, points[k])) blocked = true;
-		});
-		if (blocked) continue;
-
 		parent[ri] = rj;
 		size[rj] += size[ri];
 		degree[i] += 1;
 		degree[j] += 1;
 		chosen.push([i, j]);
+	};
+
+	const tangled: { i: number; j: number }[] = [];
+	for (const { i, j } of pairs) {
+		if (!fits(i, j)) continue;
+		const a = points[i];
+		const b = points[j];
+		const crossing =
+			chosen.some(([k, l]) => crosses(a, b, points[k], points[l])) ||
+			points.some((star, k) => k !== i && k !== j && grazes(a, b, star));
+		if (crossing) tangled.push({ i, j });
+		else join(i, j);
 	}
+	// Пересекающая линия остаётся, только если других мостиков между частями нет.
+	for (const { i, j } of tangled) if (fits(i, j)) join(i, j);
+
 	return chosen.map(([i, j]) => [points[i].id, points[j].id]);
 }

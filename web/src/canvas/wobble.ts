@@ -1,4 +1,4 @@
-import type { Scene, Star } from './scene';
+import type { Star } from './scene';
 
 const K_EDGE = 0.055;
 const K_HOME = 0.02;
@@ -7,7 +7,13 @@ const SLEEP = 0.05;
 
 export type Grab = { star: Star; worldX: number; worldY: number } | null;
 
-export function stepWobble(scene: Scene, grab: Grab, dt: number): boolean {
+// Пружины — линии созвездия: тянуть за невидимые знакомства выглядело как телекинез.
+export function stepWobble(
+	stars: Star[],
+	springs: [Star, Star][],
+	grab: Grab,
+	dt: number,
+): boolean {
 	// Фиксированный шаг: при просадке кадров резинки не должны взрываться.
 	const steps = Math.min(3, Math.max(1, Math.round(dt / 0.016)));
 	let alive = false;
@@ -20,7 +26,7 @@ export function stepWobble(scene: Scene, grab: Grab, dt: number): boolean {
 			grab.star.ovy = 0;
 		}
 
-		for (const [a, b] of scene.edges) {
+		for (const [a, b] of springs) {
 			const homeDx = a.toX - b.toX;
 			const homeDy = a.toY - b.toY;
 			const rest = Math.hypot(homeDx, homeDy);
@@ -43,7 +49,7 @@ export function stepWobble(scene: Scene, grab: Grab, dt: number): boolean {
 			b.ovy -= fy / massB;
 		}
 
-		for (const star of scene.order) {
+		for (const star of stars) {
 			if (grab && star === grab.star) continue;
 
 			star.ovx -= K_HOME * star.ox;
@@ -62,7 +68,7 @@ export function stepWobble(scene: Scene, grab: Grab, dt: number): boolean {
 	if (grab) return true;
 
 	if (!alive) {
-		for (const star of scene.order) {
+		for (const star of stars) {
 			star.ox = 0;
 			star.oy = 0;
 			star.ovx = 0;

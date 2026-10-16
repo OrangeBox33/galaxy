@@ -157,7 +157,7 @@ export const tuning = {
 
 	constellation: {
 		alpha: 0.55,
-		reach: 20, // предел длины линии в медианах расстояния до ближайшего соседа
+		reach: 0, // предел длины линии в медианах расстояния до ближайшего соседа, 0 — без предела
 		maxDegree: 0, // 0 — без ограничения
 		maxSize: 0, // звёзд в одном созвездии, 0 — без ограничения
 	},
@@ -233,6 +233,7 @@ export function createRenderer(
 
 	type ConstellationLine = { a: Star; b: Star; level: number; on: boolean };
 	const constellation = new Map<string, ConstellationLine>();
+	let springs: [Star, Star][] = [];
 	let constellationDirty = true;
 	let constellationLimits = '';
 	let constellationShown = 0;
@@ -301,7 +302,10 @@ export function createRenderer(
 			points.push({ id: star.id, x: star.toX, y: star.toY, radius: star.radius });
 		}
 		for (const line of constellation.values()) line.on = false;
-		for (const [aId, bId] of buildConstellation(points, { reach, maxDegree, maxSize })) {
+		const friendships = scene.edges.map(([a, b]): [string, string] => [a.id, b.id]);
+		const lines = buildConstellation(points, friendships, { reach, maxDegree, maxSize });
+		springs = lines.map(([aId, bId]) => [scene.stars.get(aId)!, scene.stars.get(bId)!]);
+		for (const [aId, bId] of lines) {
 			const key = edgeKey(aId, bId);
 			const line = constellation.get(key);
 			if (line) {
@@ -991,7 +995,7 @@ export function createRenderer(
 			grab.worldX = grabAt.x - (live.x - star.toX - star.ox);
 			grab.worldY = grabAt.y - (live.y - star.toY - star.oy);
 		}
-		if (grab || wobbling) wobbling = stepWobble(scene, grab, dt);
+		if (grab || wobbling) wobbling = stepWobble(scene.order, springs, grab, dt);
 
 		const target = selectedId ? 1 : 0;
 		highlight += (target - highlight) * Math.min(1, dt / 0.2);
