@@ -3,6 +3,7 @@ import type { Graph } from '../api/types';
 import { clamp01, easeInOutCubic, easeOutBack, prefersReducedMotion } from './animate';
 import { birthStar, birthTuning, paintBirth, PROTOSTAR, type BirthStar } from './birth';
 import { Camera } from './camera';
+import { buildConstellation, type ConstellationPoint } from './constellation';
 import { DUST_PARALLAX, DUST_TILE_SIZE, dustTile } from './dust';
 import { CORE, CORE_RGB, SKY_BOTTOM, SKY_MID, SKY_TOP, mix, rgb, rgba, type RGB } from './palette';
 import {
@@ -16,6 +17,7 @@ import {
 } from './scene';
 import { stepWobble, type Grab } from './wobble';
 import { shortestPath } from '../../../shared/path';
+import { LAYOUT_PARAMS } from '../../../shared/layout/params';
 
 export type Pick = { kind: 'node'; id: string } | { kind: 'empty' };
 
@@ -33,7 +35,11 @@ export type RendererHandlers = {
 // Ниже 14 экранных пикселей в звезду перестаёт попадать палец.
 const HIT_MIN_SCREEN = 14;
 
-const DEPTH_STRENGTH = 0.22;
+// Две волны под разными углами: одна читалась бы как наклон всего неба.
+const DEPTH_WAVES = [
+	{ angle: 0.6, phase: 0.3, stretch: 1 },
+	{ angle: 2.2, phase: 1.7, stretch: 1.37 },
+];
 
 // Иначе длинные перемычки между далёкими звёздами затягивают небо сеткой.
 const EDGE_GLOW_RADII = 2.5;
@@ -43,6 +49,8 @@ const EDGE_ALPHA_PLAIN = 0.22;
 
 const EDGE_WIDTH = 0.8;
 const EDGE_WIDTH_CHAIN = 1.4;
+
+const CONSTELLATION_FADE_MS = 300;
 
 const CORONA_TONGUES_AT = [
 	{ radius: 4.0, tongues: 12 }, // звезда с одной связью
@@ -147,6 +155,13 @@ export const tuning = {
 		reach: 0.1,
 	},
 
+	constellation: {
+		alpha: 0.55,
+		reach: 20, // предел длины линии в медианах расстояния до ближайшего соседа
+		maxDegree: 0, // 0 — без ограничения
+		maxSize: 0, // звёзд в одном созвездии, 0 — без ограничения
+	},
+
 	coreSize: 0.53, // радиус диска в долях радиуса звезды
 	coreTint: 0.35, // насколько центр уходит в цвет звезды
 	coreSharp: 0.6, // докуда центр держит свой цвет, в долях кромки
@@ -157,6 +172,15 @@ export const tuning = {
 	corePulsePeriod: 5, // секунд на вдох-выдох
 
 	dustAlpha: 1.4,
+
+	// Глубина плавно меняется по небу: со своей у каждой звезды соседи разной глубины
+	// разъезжались у края экрана на 220 px, и линии созвездий шли зигзагами через полнеба.
+	depth: {
+		strength: 0.22, // разброс масштаба и скорости параллакса
+		span: 1, // от «ближе» до «дальше», в радиусах неба
+		field: 1, // вес поля
+		own: 0.05, // вес личной глубины звезды
+	},
 };
 
 const TAP_SLOP = 6; // пикселей: дальше это уже перетаскивание, а не тап
@@ -207,6 +231,12 @@ export function createRenderer(
 	let showAllEdges = options.showEdges === true;
 	const edgesHidden = (): boolean => EDGES_HIDDEN && !showAllEdges;
 
+	type ConstellationLine = { a: Star; b: Star; level: number; on: boolean };
+	const constellation = new Map<string, ConstellationLine>();
+	let constellationDirty = true;
+	let constellationLimits = '';
+	let constellationShown = 0;
+
 	function resize(): void {
 		const rect = canvas.getBoundingClientRect();
 		const nextDpr = window.devicePixelRatio || 1;
@@ -227,6 +257,7 @@ export function createRenderer(
 		scene = syncScene(scene, graph, performance.now());
 		camera.updateLimits(scene.bounds);
 		findChain();
+		constellationDirty = true;
 		if (firstFit && scene.stars.size > 0) {
 			firstFit = false;
 			camera.fit(scene.bounds);
@@ -256,6 +287,46 @@ export function createRenderer(
 		for (let i = 1; i < chain.length; i += 1) chainEdges.add(edgeKey(chain[i - 1], chain[i]));
 	}
 
+	// По конечным точкам, а не по видимым: на переездах рисунок не должен перестраиваться.
+	function refreshConstellation(): void {
+		const { reach, maxDegree, maxSize } = tuning.constellation;
+		const limits = `${reach}|${maxDegree}|${maxSize}`;
+		if (!constellationDirty && limits === constellationLimits) return;
+		constellationDirty = false;
+		constellationLimits = limits;
+
+		const points: ConstellationPoint[] = [];
+		for (const star of scene.stars.values()) {
+			if (hidden.has(star.id) || star.id === birth?.id || star.node.isBlocked) continue;
+			points.push({ id: star.id, x: star.toX, y: star.toY, radius: star.radius });
+		}
+		for (const line of constellation.values()) line.on = false;
+		for (const [aId, bId] of buildConstellation(points, { reach, maxDegree, maxSize })) {
+			const key = edgeKey(aId, bId);
+			const line = constellation.get(key);
+			if (line) {
+				line.on = true;
+				continue;
+			}
+			constellation.set(key, {
+				a: scene.stars.get(aId)!,
+				b: scene.stars.get(bId)!,
+				level: 0,
+				on: true,
+			});
+		}
+	}
+
+	function fadeConstellation(dt: number): void {
+		const step = (dt * 1000) / CONSTELLATION_FADE_MS;
+		const shown = selectedId === null && edgesHidden() ? 1 : 0;
+		constellationShown = clamp01(constellationShown + (shown ? step : -step));
+		for (const [key, line] of constellation) {
+			line.level = clamp01(line.level + (line.on ? step : -step));
+			if (!line.on && line.level === 0) constellation.delete(key);
+		}
+	}
+
 	function setEdgeMode(mode: EdgeMode): void {
 		edgeMode = mode;
 	}
@@ -280,9 +351,22 @@ export function createRenderer(
 		};
 	}
 
+	// От плавного, а не конечного положения: иначе на переезде звезда прыгает.
+	function depthOf(star: Star, now: number): number {
+		const { x, y } = starPosition(star, now);
+		const depth = tuning.depth;
+		const k = Math.PI / Math.max(1, depth.span * LAYOUT_PARAMS.R_MAX);
+		let field = 0;
+		for (const wave of DEPTH_WAVES) {
+			const along = x * Math.cos(wave.angle) + y * Math.sin(wave.angle);
+			field += Math.sin((along * k) / wave.stretch + wave.phase) / DEPTH_WAVES.length;
+		}
+		return field * depth.field + star.depth * depth.own;
+	}
+
 	function project(star: Star, now: number): { sx: number; sy: number; scale: number } {
 		const position = livePosition(star, now);
-		const scale = camera.zoom * (1 + star.depth * DEPTH_STRENGTH);
+		const scale = camera.zoom * (1 + depthOf(star, now) * tuning.depth.strength);
 		return {
 			sx: cssWidth / 2 + (position.x - camera.x) * scale,
 			sy: cssHeight / 2 + (position.y - camera.y) * scale,
@@ -295,7 +379,7 @@ export function createRenderer(
 		screenY: number,
 		depth: number,
 	): { x: number; y: number } {
-		const scale = camera.zoom * (1 + depth * DEPTH_STRENGTH);
+		const scale = camera.zoom * (1 + depth * tuning.depth.strength);
 		return {
 			x: (screenX - cssWidth / 2) / scale + camera.x,
 			y: (screenY - cssHeight / 2) / scale + camera.y,
@@ -333,6 +417,7 @@ export function createRenderer(
 	function finishBirth(): void {
 		const current = birth;
 		birth = null;
+		constellationDirty = true;
 		current?.done();
 	}
 
@@ -386,6 +471,7 @@ export function createRenderer(
 			(neighbours?.has(id) ?? false) ||
 			chainNodes.has(id);
 
+		drawConstellation(now);
 		drawEdges(now, isLit);
 		drawCorona(now, isLit, frame);
 		drawCores(now, isLit, frame);
@@ -520,6 +606,26 @@ export function createRenderer(
 		gradient.addColorStop(endB + (1 - endB) * 0.34, rgba(b.halo, near * 0.85));
 		gradient.addColorStop(1, rgba(b.halo, near));
 		return gradient;
+	}
+
+	function drawConstellation(now: number): void {
+		if (constellationShown <= 0) return;
+		ctx.save();
+		ctx.globalCompositeOperation = 'lighter';
+		ctx.lineWidth = EDGE_WIDTH;
+		const shown = easeInOutCubic(constellationShown);
+		for (const { a, b, level } of constellation.values()) {
+			if (level <= 0 || hidden.has(a.id) || hidden.has(b.id)) continue;
+			const pa = project(a, now);
+			const pb = project(b, now);
+			const alpha = tuning.constellation.alpha * shown * easeInOutCubic(level);
+			ctx.strokeStyle = linkGradient(pa.sx, pa.sy, pb.sx, pb.sy, a, b, alpha);
+			ctx.beginPath();
+			ctx.moveTo(pa.sx, pa.sy);
+			ctx.lineTo(pb.sx, pb.sy);
+			ctx.stroke();
+		}
+		ctx.restore();
 	}
 
 	function drawEdges(now: number, isLit: (id: string) => boolean): void {
@@ -889,6 +995,8 @@ export function createRenderer(
 
 		const target = selectedId ? 1 : 0;
 		highlight += (target - highlight) * Math.min(1, dt / 0.2);
+		refreshConstellation();
+		fadeConstellation(dt);
 
 		draw(now);
 		requestAnimationFrame(frame);
@@ -929,7 +1037,7 @@ export function createRenderer(
 		candidate = pickStar(point.x, point.y);
 		if (candidate) {
 			const live = livePosition(candidate, performance.now());
-			const world = screenToWorldAtDepth(point.x, point.y, candidate.depth);
+			const world = screenToWorldAtDepth(point.x, point.y, depthOf(candidate, performance.now()));
 			grabOffset = { x: live.x - world.x, y: live.y - world.y };
 		}
 		lastPoint = { ...point, t: performance.now() };
@@ -973,7 +1081,7 @@ export function createRenderer(
 				camera.endDrag();
 				camera.stop();
 			}
-			const world = screenToWorldAtDepth(point.x, point.y, candidate.depth);
+			const world = screenToWorldAtDepth(point.x, point.y, depthOf(candidate, performance.now()));
 			grabAt = { x: world.x + grabOffset.x, y: world.y + grabOffset.y };
 			wobbling = true;
 			lastPoint = { ...point, t: performance.now() };
@@ -1067,6 +1175,7 @@ export function createRenderer(
 		// Кого на небе ещё нет: рождение зажигает их само.
 		setHidden(ids: string[]): void {
 			hidden = new Set(ids);
+			constellationDirty = true;
 		},
 		// Обещание исполняется, когда звезда догорела до своего размера.
 		ignite(id: string): Promise<void> {

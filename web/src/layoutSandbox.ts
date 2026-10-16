@@ -348,6 +348,26 @@ const panel = createLayoutPanel({
 	},
 	sections: [
 		{
+			title: 'Созвездия',
+			bag: tuning.constellation as unknown as Bag,
+			controls: [
+				range('alpha', 'яркость', 0, 1, 0.01),
+				range('reach', 'предел длины линии, в соседних расстояниях', 1, 30, 0.5),
+				range('maxDegree', 'линий у звезды, 0 — без ограничения', 0, 6, 1),
+				range('maxSize', 'звёзд в созвездии, 0 — без ограничения', 0, 60, 1),
+			],
+		},
+		{
+			title: 'Глубина',
+			bag: tuning.depth as unknown as Bag,
+			controls: [
+				range('strength', 'сила параллакса', 0, 0.4, 0.01),
+				range('span', 'от «ближе» до «дальше», в радиусах неба', 0.2, 4, 0.1),
+				range('field', 'вес поля', 0, 1, 0.05),
+				range('own', 'личная глубина звезды', 0, 1, 0.01),
+			],
+		},
+		{
 			title: 'Связи выбранной звезды',
 			bag: tuning.edge as unknown as Bag,
 			controls: [
