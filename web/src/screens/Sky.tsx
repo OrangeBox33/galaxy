@@ -43,6 +43,9 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 	const [edgeMode, setEdgeMode] = useState<EdgeMode>(
 		() => (localStorage.getItem('galaxy:edges') as EdgeMode | null) ?? 'glow',
 	);
+	const [constellation, setConstellation] = useState(
+		() => localStorage.getItem('galaxy:constellation') !== 'off',
+	);
 
 	useEffect(() => {
 		if (!profile?.needsBirth) return;
@@ -126,6 +129,7 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 		rendererRef.current = renderer;
 		// Рендерер пересоздался — спрятанного он о себе не помнит.
 		renderer.setHidden(unbornRef.current === null ? [] : [unbornRef.current]);
+		renderer.setConstellation(localStorage.getItem('galaxy:constellation') !== 'off');
 		return () => {
 			renderer.destroy();
 			rendererRef.current = null;
@@ -155,6 +159,11 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 		rendererRef.current?.setEdgeMode(edgeMode);
 		localStorage.setItem('galaxy:edges', edgeMode);
 	}, [edgeMode]);
+
+	useEffect(() => {
+		rendererRef.current?.setConstellation(constellation);
+		localStorage.setItem('galaxy:constellation', constellation ? 'on' : 'off');
+	}, [constellation]);
 
 	useEffect(() => {
 		if (!graph) return;
@@ -218,6 +227,19 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 					onClick={() => rendererRef.current?.fit()}
 				>
 					⤢
+				</button>
+				<button
+					className="round"
+					title={constellation ? 'Скрыть связи' : 'Показать связи'}
+					aria-pressed={constellation}
+					onClick={() => setConstellation(!constellation)}
+				>
+					<svg className="round__icon" viewBox="0 0 20 20" aria-hidden="true">
+						{constellation && <polyline points="4,15 9,6 16,9" />}
+						<circle cx="4" cy="15" r="1.8" />
+						<circle cx="9" cy="6" r="1.8" />
+						<circle cx="16" cy="9" r="1.8" />
+					</svg>
 				</button>
 			</div>
 

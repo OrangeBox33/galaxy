@@ -234,6 +234,7 @@ export function createRenderer(
 	type ConstellationLine = { a: Star; b: Star; level: number; on: boolean };
 	const constellation = new Map<string, ConstellationLine>();
 	let springs: [Star, Star][] = [];
+	let constellationOn = true;
 	let constellationDirty = true;
 	let constellationLimits = '';
 	let constellationShown = 0;
@@ -323,7 +324,7 @@ export function createRenderer(
 
 	function fadeConstellation(dt: number): void {
 		const step = (dt * 1000) / CONSTELLATION_FADE_MS;
-		const shown = selectedId === null && edgesHidden() ? 1 : 0;
+		const shown = constellationOn && selectedId === null && edgesHidden() ? 1 : 0;
 		constellationShown = clamp01(constellationShown + (shown ? step : -step));
 		for (const [key, line] of constellation) {
 			line.level = clamp01(line.level + (line.on ? step : -step));
@@ -337,6 +338,10 @@ export function createRenderer(
 
 	function setShowEdges(value: boolean): void {
 		showAllEdges = value;
+	}
+
+	function setConstellation(on: boolean): void {
+		constellationOn = on;
 	}
 
 	function focusOn(id: string, zoom?: number): void {
@@ -995,7 +1000,7 @@ export function createRenderer(
 			grab.worldX = grabAt.x - (live.x - star.toX - star.ox);
 			grab.worldY = grabAt.y - (live.y - star.toY - star.oy);
 		}
-		if (grab || wobbling) wobbling = stepWobble(scene.order, springs, grab, dt);
+		if (grab || wobbling) wobbling = stepWobble(scene.order, constellationOn ? springs : [], grab, dt);
 
 		const target = selectedId ? 1 : 0;
 		highlight += (target - highlight) * Math.min(1, dt / 0.2);
@@ -1164,6 +1169,7 @@ export function createRenderer(
 		setSelection,
 		setEdgeMode,
 		setShowEdges,
+		setConstellation,
 		focusOn,
 		focusOnMe: () => focusOn(scene.me),
 		// Экранные координаты звезды для окна «возможных друзей»: оно живёт вне канвы, а искре
