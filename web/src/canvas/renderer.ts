@@ -161,6 +161,25 @@ export const tuning = {
 		reach: 0, // предел длины линии в медианах расстояния до ближайшего соседа, 0 — без предела
 		maxDegree: 0, // 0 — без ограничения
 		maxSize: 0, // звёзд в одном созвездии, 0 — без ограничения
+
+		glowWidth: 8, // px
+		glowAlpha: 0.07, // в долях яркости самой линии
+
+		breatheDepth: 0.5,
+		breathePeriod: 7, // с
+	},
+
+	shine: {
+		// Лучи — только на общем виде: вблизи у звезды есть языки, и лучи с ними спорят.
+		glintEvery: 15, // с между бликами одной звезды
+		glintDuration: 1.2, // с
+		glintLength: 2, // px
+		glintAlpha: 0.8,
+		glintZoom: 2, // видны до этого приближения, в долях «всё небо в экране»
+
+		haloSize: 2.2, // в радиусах диска
+		haloAlpha: 0.9,
+		haloPeriod: 4, // с
 	},
 
 	coreSize: 0.53, // радиус диска в долях радиуса звезды
@@ -483,8 +502,10 @@ export function createRenderer(
 
 		drawConstellation(now);
 		drawEdges(now, isLit);
+		drawHalo(now, isLit);
 		drawCorona(now, isLit, frame);
 		drawCores(now, isLit, frame);
+		drawGlints(now);
 		drawBirth(frame);
 		drawLabels(now, isLit, frame);
 	}
@@ -622,20 +643,61 @@ export function createRenderer(
 		if (constellationShown <= 0) return;
 		ctx.save();
 		ctx.globalCompositeOperation = 'lighter';
-		ctx.lineWidth = EDGE_WIDTH;
+		ctx.lineCap = 'round';
+		const look = tuning.constellation;
 		const shown = easeInOutCubic(constellationShown);
+		const t = now / 1000;
+		const wave = Math.PI / LAYOUT_PARAMS.R_MAX;
 		for (const { a, b, level } of constellation.values()) {
 			if (level <= 0 || hidden.has(a.id) || hidden.has(b.id)) continue;
 			const pa = project(a, now);
 			const pb = project(b, now);
-			const alpha = tuning.constellation.alpha * shown * easeInOutCubic(level);
-			ctx.strokeStyle = rgba(CORE_RGB, alpha);
+			let alpha = look.alpha * shown * easeInOutCubic(level);
+			if (!reduced && look.breathePeriod > 0) {
+				// Фаза от места на небе, а не от экрана: иначе волна ехала бы вместе с камерой.
+				const phase = (a.toX + b.toX + a.toY + b.toY) * 0.5 * wave;
+				const beat = 0.5 + 0.5 * Math.sin((t * Math.PI * 2) / look.breathePeriod + phase);
+				alpha *= 1 - look.breatheDepth * beat;
+			}
+
+			ctx.strokeStyle = CORE;
 			ctx.beginPath();
 			ctx.moveTo(pa.sx, pa.sy);
 			ctx.lineTo(pb.sx, pb.sy);
+			if (look.glowAlpha > 0) {
+				ctx.lineWidth = look.glowWidth;
+				ctx.globalAlpha = alpha * look.glowAlpha * 0.4;
+				ctx.stroke();
+				ctx.lineWidth = look.glowWidth * 0.4;
+				ctx.globalAlpha = alpha * look.glowAlpha;
+				ctx.stroke();
+			}
+			ctx.lineWidth = EDGE_WIDTH;
+			ctx.globalAlpha = alpha;
 			ctx.stroke();
 		}
 		ctx.restore();
+	}
+
+	// Готовое пятно на цвет: drawImage дешевле радиального градиента на каждую звезду в кадре.
+	const sprites = new Map<string, HTMLCanvasElement>();
+	function sprite(color: RGB): HTMLCanvasElement {
+		const key = color.join(',');
+		const cached = sprites.get(key);
+		if (cached) return cached;
+		const size = 64;
+		const image = document.createElement('canvas');
+		image.width = size;
+		image.height = size;
+		const paint = image.getContext('2d')!;
+		const gradient = paint.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+		gradient.addColorStop(0, rgba(color, 1));
+		gradient.addColorStop(0.25, rgba(color, 0.45));
+		gradient.addColorStop(1, rgba(color, 0));
+		paint.fillStyle = gradient;
+		paint.fillRect(0, 0, size, size);
+		sprites.set(key, image);
+		return image;
 	}
 
 	function drawEdges(now: number, isLit: (id: string) => boolean): void {
@@ -866,6 +928,75 @@ export function createRenderer(
 		if (reduced || tuning.corePulse <= 0 || tuning.corePulsePeriod <= 0) return 1;
 		const turn = (now / 1000) * ((Math.PI * 2) / tuning.corePulsePeriod);
 		return 1 + tuning.corePulse * Math.sin(turn + star.twinklePhase);
+	}
+
+	function drawHalo(now: number, isLit: (id: string) => boolean): void {
+		const shine = tuning.shine;
+		if (shine.haloAlpha <= 0) return;
+		ctx.save();
+		ctx.globalCompositeOperation = 'lighter';
+		const t = now / 1000;
+		for (const star of scene.order) {
+			if (star.node.isBlocked || hidden.has(star.id)) continue;
+			const { sx, sy, scale } = project(star, now);
+			const beat =
+				reduced || shine.haloPeriod <= 0
+					? 0
+					: Math.sin((t * Math.PI * 2) / shine.haloPeriod + star.twinklePhase);
+			const size = star.radius * scale * tuning.coreSize * shine.haloSize * (1 + 0.15 * beat);
+			if (size < 1 || sx + size < 0 || sx - size > cssWidth || sy + size < 0 || sy - size > cssHeight)
+				continue;
+			const dim = isLit(star.id) ? 1 : 1 - 0.65 * highlight;
+			ctx.globalAlpha = shine.haloAlpha * (0.8 + 0.2 * beat) * dim;
+			ctx.drawImage(sprite(star.halo), sx - size, sy - size, size * 2, size * 2);
+		}
+		ctx.restore();
+	}
+
+	function drawGlints(now: number): void {
+		const shine = tuning.shine;
+		if (reduced || shine.glintAlpha <= 0 || shine.glintEvery <= 0 || shine.glintDuration <= 0) return;
+		const fit = camera.fitZoom(scene.bounds);
+		const near = camera.zoom / Math.max(1e-6, fit * shine.glintZoom);
+		// Гаснут плавно: от порога до полуторного приближения.
+		const gate = clamp01((1.5 - near) / 0.5);
+		if (gate <= 0) return;
+
+		ctx.save();
+		ctx.globalCompositeOperation = 'lighter';
+		ctx.lineCap = 'round';
+		ctx.lineWidth = 1.2;
+		const t = now / 1000;
+		for (const star of scene.order) {
+			if (star.node.isBlocked || hidden.has(star.id)) continue;
+			const seed = fraction(star.id, 47);
+			const cycle = Math.max(shine.glintDuration, shine.glintEvery * (0.6 + 0.8 * seed));
+			const k = ((t + seed * cycle) % cycle) / shine.glintDuration;
+			if (k >= 1) continue;
+			const { sx, sy, scale } = project(star, now);
+			const flash = Math.sin(Math.PI * k);
+			const length =
+				(shine.glintLength + star.radius * scale * tuning.coreSize * 3) * (0.6 + 0.4 * flash);
+			if (sx + length < 0 || sx - length > cssWidth || sy + length < 0 || sy - length > cssHeight)
+				continue;
+			const color = mix(CORE_RGB, star.halo, 0.5);
+			const alpha = shine.glintAlpha * flash * flash * gate;
+			for (const [dx, dy] of [
+				[length, 0],
+				[0, length],
+			]) {
+				const ray = ctx.createLinearGradient(sx - dx, sy - dy, sx + dx, sy + dy);
+				ray.addColorStop(0, rgba(color, 0));
+				ray.addColorStop(0.5, rgba(color, alpha));
+				ray.addColorStop(1, rgba(color, 0));
+				ctx.strokeStyle = ray;
+				ctx.beginPath();
+				ctx.moveTo(sx - dx, sy - dy);
+				ctx.lineTo(sx + dx, sy + dy);
+				ctx.stroke();
+			}
+		}
+		ctx.restore();
 	}
 
 	// Сторона вращения своя у каждой звезды: иначе небо крутится синхронно, как механизм.

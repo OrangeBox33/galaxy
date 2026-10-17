@@ -336,7 +336,15 @@ const renderer = createRenderer(
 
 const panel = createLayoutPanel({
 	storageKey: 'galaxy:layout-sandbox-1',
-	snapshot: () => ({ params, shape }),
+	snapshot: () => ({
+		params,
+		shape,
+		constellation: tuning.constellation,
+		shine: tuning.shine,
+		depth: tuning.depth,
+		edge: tuning.edge,
+		view,
+	}),
 	onChange: () => {
 		renderer.camera.minZoomFactor = Number(view.minZoomFactor);
 		renderer.setShowEdges(Boolean(view.showEdges));
@@ -355,6 +363,24 @@ const panel = createLayoutPanel({
 				range('reach', 'предел длины линии, в соседних расстояниях, 0 — без предела', 0, 30, 0.5),
 				range('maxDegree', 'линий у звезды, 0 — без ограничения', 0, 6, 1),
 				range('maxSize', 'звёзд в созвездии, 0 — без ограничения', 0, 60, 1),
+				range('glowWidth', 'ширина сияния линий, px', 1, 20, 0.5),
+				range('glowAlpha', 'яркость сияния', 0, 1, 0.01),
+				range('breatheDepth', 'глубина дыхания волной по небу', 0, 1, 0.01),
+				range('breathePeriod', 'секунд на вдох-выдох волны', 1, 30, 0.5),
+			],
+		},
+		{
+			title: 'Сияние звёзд',
+			bag: tuning.shine as unknown as Bag,
+			controls: [
+				range('glintEvery', 'секунд между бликами звезды', 2, 60, 0.5),
+				range('glintDuration', 'длительность блика, с', 0.2, 3, 0.05),
+				range('glintLength', 'длина лучей, px', 2, 40, 0.5),
+				range('glintAlpha', 'яркость лучей', 0, 1, 0.01),
+				range('glintZoom', 'лучи видны до приближения, в «всё небо»', 0.5, 4, 0.1),
+				range('haloSize', 'ореол, в радиусах диска', 1.5, 8, 0.1),
+				range('haloAlpha', 'яркость ореола', 0, 1, 0.01),
+				range('haloPeriod', 'секунд на вдох-выдох ореола', 1, 20, 0.5),
 			],
 		},
 		{
