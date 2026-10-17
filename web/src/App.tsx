@@ -3,7 +3,8 @@ import { BASE_PATH } from '../../shared/config';
 import { auth } from './api/endpoints';
 import { ApiError } from './api/client';
 import { useStore } from './store';
-import { initData, isInsideTelegram, prepareWebApp } from './telegram/webapp';
+import { initData, isInsideTelegram, prepareWebApp, webApp } from './telegram/webapp';
+import { startAnalytics } from './analytics';
 import { Sky } from './screens/Sky';
 import { Admin } from './screens/Admin';
 
@@ -37,9 +38,14 @@ export function App() {
 			return;
 		}
 
-		auth.telegram(initData())
+		auth.telegram(initData(), {
+			platform: webApp()?.platform,
+			// Кнопки бота дописывают ?from=, по нему видно, откуда открыли карту.
+			from: new URLSearchParams(window.location.search).get('from'),
+		})
 			.then((profile) => {
 				setProfile(profile);
+				startAnalytics();
 				setPhase({ kind: 'ready' });
 			})
 			.catch((err: unknown) => {

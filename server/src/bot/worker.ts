@@ -2,7 +2,7 @@ import { db } from '../db.js';
 import { log } from '../lib/log.js';
 import { displayName } from '../lib/names.js';
 import { normalizePair } from '../lib/pair.js';
-import { OPEN_MAP_KEYBOARD, sendMessage, type TelegramError } from './api.js';
+import { openMapKeyboard, sendMessage, type TelegramError } from './api.js';
 import { composeMessage, type OutboxEvent } from './outbox.js';
 
 const TICK_MS = 10 * 60 * 1000;
@@ -83,7 +83,7 @@ async function deliver(userId: bigint, now: Date): Promise<void> {
 	if (events.length === 0) return;
 
 	try {
-		await sendMessage(userId, composeMessage(events), OPEN_MAP_KEYBOARD);
+		await sendMessage(userId, composeMessage(events), openMapKeyboard('notify'));
 		await db.$transaction([
 			db.botOutbox.updateMany({
 				where: { id: { in: kept } },

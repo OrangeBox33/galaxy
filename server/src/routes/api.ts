@@ -5,6 +5,7 @@ import { graphRouter } from './graph.js';
 import { linksRouter } from './links.js';
 import { suggestionsRouter } from './suggestions.js';
 import { adminRouter } from './admin.js';
+import { eventsRouter } from './events.js';
 import { mutationRateLimit } from '../lib/rateLimit.js';
 
 export function apiRouter(): Router {
@@ -21,6 +22,7 @@ export function apiRouter(): Router {
 	router.use('/graph', graphRouter());
 	router.use('/links', linksRouter());
 	router.use('/suggestions', suggestionsRouter());
+	router.use('/events', eventsRouter());
 	router.use('/admin', adminRouter());
 
 	return router;

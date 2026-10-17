@@ -28,6 +28,7 @@ beforeEach(async () => {
 	// Порядок важен: сначала зависимые таблицы, потом пользователи.
 	await db.botOutbox.deleteMany();
 	await db.adminAudit.deleteMany();
+	await db.analyticsEvent.deleteMany();
 	await db.suggestionDismissal.deleteMany();
 	await db.link.deleteMany();
 	await db.user.deleteMany();
@@ -266,6 +267,22 @@ describe('постоянная ссылка', () => {
 		expect(outbox[0].userId).toBe(100n);
 		expect(outbox[0].kind).toBe('by_link');
 		expect(outbox[0].actorId).toBe(555n);
+	});
+
+	it('вход и приход по ссылке попадают в аналитику', async () => {
+		await login(100);
+		const token = await tokenOf(100n);
+
+		await login(555, token);
+		await login(555, token);
+
+		const rows = await db.analyticsEvent.findMany({ orderBy: { id: 'asc' } });
+		expect(rows.map((row) => [row.userId, row.type, row.detail])).toEqual([
+			[100n, 'visit', 'direct'],
+			[100n, 'invite_arrival', null],
+			[555n, 'visit', 'link'],
+			[555n, 'visit', 'link'],
+		]);
 	});
 
 	it('ссылка заблокированного не связывает', async () => {

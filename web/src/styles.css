@@ -851,3 +851,22 @@ button {
 .sheet--bare .sheet__body {
 	pointer-events: auto;
 }
+
+.analytics section {
+	margin-bottom: 22px;
+}
+
+.analytics h3 {
+	margin: 0 0 8px;
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--text-dim);
+}
+
+.analytics__dim {
+	color: var(--text-dim);
+}
+
+.admin__table--compact {
+	width: auto;
+}

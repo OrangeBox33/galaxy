@@ -7,6 +7,7 @@ import { env } from '../env.js';
 import { normalizePair } from './pair.js';
 import { markLayoutDirty } from '../layout/state.js';
 import { enqueue } from '../bot/outbox.js';
+import { track } from './analytics.js';
 
 export const SHARE_TEXT =
 	'Привет! Я собираю карту своих друзей и знакомых — она выглядит как звёздное небо, ' +
@@ -94,6 +95,7 @@ export async function linkByToken(
 	await tx.user.update({ where: { id: bId }, data: { degree: { increment: 1 } } });
 
 	await enqueue(tx, host.id, 'by_link', userId);
+	await track(tx, host.id, 'invite_arrival');
 
 	await markLayoutDirty(tx);
 }

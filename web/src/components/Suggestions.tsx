@@ -12,6 +12,7 @@ import { useStore } from '../store';
 import { suggestFriends, suggestHubs } from '../../../shared/suggest';
 import { Avatar } from './Avatar';
 import { haptic } from '../telegram/webapp';
+import { track, trackOnce } from '../analytics';
 
 export type StarAt = (id: string) => { x: number; y: number; radius: number } | null;
 
@@ -204,6 +205,10 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 	});
 
 	useEffect(() => {
+		for (const row of rows) if (!row.exit) trackOnce(`suggest:${row.id}`, 'suggest_shown');
+	}, [rows]);
+
+	useEffect(() => {
 		for (const row of rows) {
 			if (!row.exit || leaving.current.has(row.id)) continue;
 			leaving.current.add(row.id);
@@ -272,6 +277,7 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 									className="suggest__btn"
 									onClick={(event) => {
 										haptic('light');
+										track('link', 'suggest');
 										leave(row, 'burst', event);
 										// Ошибку глотаем: хранилище вернёт граф назад, и карточка придёт снова.
 										void linkWith(row.id).catch(() => {});
@@ -282,6 +288,7 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 								<button
 									className="suggest__btn suggest__btn--ghost"
 									onClick={(event) => {
+										track('suggest_dismiss');
 										leave(row, 'fade', event);
 										void dismissSuggestion(row.id);
 									}}

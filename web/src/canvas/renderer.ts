@@ -30,6 +30,7 @@ export type EdgeMode = 'glow' | 'full';
 export type RendererHandlers = {
 	onPick: (pick: Pick) => void;
 	onHover: (id: string | null) => void;
+	onGesture?: (kind: 'zoom' | 'pan' | 'grab') => void;
 };
 
 // Ниже 14 экранных пикселей в звезду перестаёт попадать палец.
@@ -1062,6 +1063,7 @@ export function createRenderer(
 			const distance = Math.hypot(a.x - b.x, a.y - b.y);
 			if (pinchDistance > 0 && distance > 0) {
 				camera.zoomAt(distance / pinchDistance, (a.x + b.x) / 2, (a.y + b.y) / 2);
+				handlers.onGesture?.('zoom');
 			}
 			pinchDistance = distance;
 			return;
@@ -1087,6 +1089,7 @@ export function createRenderer(
 		if (candidate && moved > TAP_SLOP) {
 			if (!grab) {
 				grab = { star: candidate, worldX: 0, worldY: 0 };
+				handlers.onGesture?.('grab');
 				camera.endDrag();
 				camera.stop();
 			}
@@ -1126,6 +1129,7 @@ export function createRenderer(
 		candidate = null;
 
 		if (moved > TAP_SLOP) {
+			handlers.onGesture?.('pan');
 			camera.throw(flingX, flingY);
 			return;
 		}
@@ -1148,6 +1152,7 @@ export function createRenderer(
 		const rect = canvas.getBoundingClientRect();
 		const factor = Math.exp(-event.deltaY * 0.0015);
 		camera.zoomAt(factor, event.clientX - rect.left, event.clientY - rect.top);
+		handlers.onGesture?.('zoom');
 	}
 
 	const motionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');

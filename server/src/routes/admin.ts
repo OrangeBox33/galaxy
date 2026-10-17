@@ -14,6 +14,8 @@ import { isRecomputing, recomputeLayout } from '../layout/runner.js';
 // Telegram id всегда положительные, поэтому отрицательные свободны под тестовых.
 const TEST_ID_START = -1000000n;
 
+const DAILY_DAYS = 14;
+
 async function nextTestId(tx: Prisma.TransactionClient): Promise<bigint> {
 	const lowest = await tx.user.findFirst({
 		where: { id: { lt: 0n } },
@@ -62,6 +64,112 @@ export function adminRouter(): Router {
 					lastSeenAt: user.lastSeenAt.toISOString(),
 				})),
 			);
+		} catch (err) {
+			next(err);
+		}
+	});
+
+	router.get('/analytics', async (_req, res, next) => {
+		try {
+			const now = Date.now();
+			const dayAgo = new Date(now - 24 * 3600_000);
+			const weekAgo = new Date(now - 7 * 24 * 3600_000);
+			const since = new Date(now - DAILY_DAYS * 24 * 3600_000);
+
+			const [totals, daily, perUser] = await Promise.all([
+				db.$queryRaw<
+					{
+						type: string;
+						detail: string | null;
+						day: bigint;
+						week: bigint;
+						all: bigint;
+						users: bigint;
+						seconds: bigint;
+					}[]
+				>`
+					SELECT "type", "detail",
+						count(*) FILTER (WHERE "createdAt" >= ${dayAgo}) AS "day",
+						count(*) FILTER (WHERE "createdAt" >= ${weekAgo}) AS "week",
+						count(*) AS "all",
+						count(DISTINCT "userId") AS "users",
+						coalesce(sum("value"), 0) AS "seconds"
+					FROM "AnalyticsEvent"
+					GROUP BY "type", "detail"
+					ORDER BY "type", "detail"`,
+				// Дни — по Москве: createdAt хранится в UTC без пояса.
+				db.$queryRaw<{ date: string; users: bigint; visits: bigint }[]>`
+					SELECT to_char(("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Moscow', 'YYYY-MM-DD') AS "date",
+						count(DISTINCT "userId") AS "users",
+						count(*) AS "visits"
+					FROM "AnalyticsEvent"
+					WHERE "type" = 'visit' AND "createdAt" >= ${since}
+					GROUP BY 1
+					ORDER BY 1 DESC`,
+				db.analyticsEvent.groupBy({
+					by: ['userId', 'type'],
+					_count: { _all: true },
+					_sum: { value: true },
+					_max: { createdAt: true },
+				}),
+			]);
+
+			const ids = [...new Set(perUser.map((row) => row.userId))];
+			const people = await db.user.findMany({
+				where: { id: { in: ids } },
+				select: {
+					id: true,
+					customName: true,
+					telegramFirstName: true,
+					telegramLastName: true,
+					telegramUsername: true,
+					platform: true,
+				},
+			});
+			const byId = new Map(people.map((user) => [user.id, user]));
+
+			const users = new Map<
+				bigint,
+				{ counts: Record<string, number>; sessionSec: number; lastAt: Date | null }
+			>();
+			for (const row of perUser) {
+				const entry = users.get(row.userId) ?? { counts: {}, sessionSec: 0, lastAt: null };
+				entry.counts[row.type] = row._count._all;
+				if (row.type === 'session') entry.sessionSec = row._sum.value ?? 0;
+				const at = row._max.createdAt;
+				if (at && (!entry.lastAt || at > entry.lastAt)) entry.lastAt = at;
+				users.set(row.userId, entry);
+			}
+
+			res.json({
+				totals: totals.map((row) => ({
+					type: row.type,
+					detail: row.detail,
+					day: Number(row.day),
+					week: Number(row.week),
+					all: Number(row.all),
+					users: Number(row.users),
+					seconds: Number(row.seconds),
+				})),
+				daily: daily.map((row) => ({
+					date: row.date,
+					users: Number(row.users),
+					visits: Number(row.visits),
+				})),
+				users: [...users].map(([id, entry]) => {
+					const user = byId.get(id);
+					return {
+						id: id.toString(),
+						// Удалившиеся остаются в счёте, но имени у них больше нет.
+						name: user ? displayName(user) : null,
+						username: user?.telegramUsername ?? null,
+						platform: user?.platform ?? null,
+						counts: entry.counts,
+						sessionSec: entry.sessionSec,
+						lastAt: entry.lastAt?.toISOString() ?? null,
+					};
+				}),
+			});
 		} catch (err) {
 			next(err);
 		}

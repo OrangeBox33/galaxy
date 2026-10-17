@@ -10,6 +10,7 @@ import { ProfileSheet } from '../components/ProfileSheet';
 import { InviteSheet } from '../components/InviteSheet';
 import { Suggestions } from '../components/Suggestions';
 import { haptic } from '../telegram/webapp';
+import { track, trackOnce } from '../analytics';
 
 // Подобрано в песочнице рождения (web/birth.html). Ближе камеры нет: потолок
 // зума задан в camera.ts, туда и упираемся.
@@ -55,6 +56,7 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 		// секунда-две проходит, пока человек заполняет профиль.
 		spotRef.current = meApi.birth();
 		setSheet('intro');
+		track('first_intro');
 	}, [profile?.needsBirth, profile?.id]);
 
 	// Заведённому заранее (холодный старт) подсказки нашлись бы сразу: до рождения
@@ -93,6 +95,7 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 			}
 
 			await meApi.born();
+			track('first_born');
 			await refreshProfile();
 		} finally {
 			// Не зажглась по ошибке сети — пусть звезда всё равно окажется на небе.
@@ -110,6 +113,7 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 					return;
 				}
 				haptic('light');
+				track('star_tap', pick.id === useStore.getState().graph?.me ? 'self' : 'other');
 				// Выбор из хранилища, а не из замыкания: иначе сцена пересобиралась бы на каждый выбор.
 				const current = useStore.getState().selection;
 				if (current?.kind === pick.kind && current.id === pick.id) {
@@ -125,6 +129,7 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 				select({ kind: pick.kind, id: pick.id });
 			},
 			onHover: (id) => hover(id),
+			onGesture: (kind) => trackOnce(`gesture:${kind}`, 'gesture', kind),
 		});
 		rendererRef.current = renderer;
 		// Рендерер пересоздался — спрятанного он о себе не помнит.
@@ -194,7 +199,13 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 			<canvas ref={canvasRef} className="sky__canvas" />
 
 			<div className="sky__top">
-				<button className="chip" onClick={() => setShowInvite(true)}>
+				<button
+					className="chip"
+					onClick={() => {
+						track('invite_open');
+						setShowInvite(true);
+					}}
+				>
 					Позвать друзей
 				</button>
 				{!EDGES_HIDDEN && (
@@ -217,14 +228,20 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 				<button
 					className="round"
 					title="Найти меня"
-					onClick={() => rendererRef.current?.focusOnMe()}
+					onClick={() => {
+						track('tool', 'find_me');
+						rendererRef.current?.focusOnMe();
+					}}
 				>
 					◎
 				</button>
 				<button
 					className="round"
 					title="Всё небо"
-					onClick={() => rendererRef.current?.fit()}
+					onClick={() => {
+						track('tool', 'fit');
+						rendererRef.current?.fit();
+					}}
 				>
 					⤢
 				</button>
@@ -232,7 +249,10 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 					className="round"
 					title={constellation ? 'Скрыть связи' : 'Показать связи'}
 					aria-pressed={constellation}
-					onClick={() => setConstellation(!constellation)}
+					onClick={() => {
+						track('tool', constellation ? 'constellation_off' : 'constellation_on');
+						setConstellation(!constellation);
+					}}
 				>
 					<svg className="round__icon" viewBox="0 0 20 20" aria-hidden="true">
 						{constellation && <polyline points="4,15 9,6 16,9" />}

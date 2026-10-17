@@ -70,3 +70,26 @@ export type AdminLink = {
 	otherName: string;
 	createdAt: string;
 };
+
+export type AdminAnalytics = {
+	totals: {
+		type: string;
+		detail: string | null;
+		day: number;
+		week: number;
+		all: number;
+		users: number;
+		seconds: number;
+	}[];
+	daily: { date: string; users: number; visits: number }[];
+	users: {
+		id: string;
+		// null — человек удалил аккаунт, а события остались.
+		name: string | null;
+		username: string | null;
+		platform: string | null;
+		counts: Record<string, number>;
+		sessionSec: number;
+		lastAt: string | null;
+	}[];
+};

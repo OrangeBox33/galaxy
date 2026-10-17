@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { openShare } from '../telegram/webapp';
+import { track } from '../analytics';
 
 export function InviteSheet({ onClose }: { onClose: () => void }) {
 	const profile = useStore((state) => state.profile);
@@ -16,6 +17,7 @@ export function InviteSheet({ onClose }: { onClose: () => void }) {
 		try {
 			await navigator.clipboard.writeText(url);
 			setCopied(true);
+			track('invite_copy');
 		} catch {
 			setError('Скопировать не вышло — выделите ссылку вручную');
 		}
@@ -38,7 +40,13 @@ export function InviteSheet({ onClose }: { onClose: () => void }) {
 						</small>
 						{error && <div className="sheet__error">{error}</div>}
 						<div className="sheet__actions">
-							<button className="btn" onClick={() => openShare(url, shareText)}>
+							<button
+								className="btn"
+								onClick={() => {
+									track('invite_share');
+									openShare(url, shareText);
+								}}
+							>
 								Отправить друзьям
 							</button>
 							<button className="btn btn--ghost" onClick={() => void copy()}>

@@ -3,6 +3,7 @@ import { randomFlame } from '../lib/flame.js';
 import { db } from '../db.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { str, body as reqBody } from '../lib/validate.js';
+import { track } from '../lib/analytics.js';
 import { sanitizeIncoming } from '../lib/names.js';
 import { ensureInviteToken, linkByToken } from '../lib/inviteLink.js';
 import { toProfile } from '../lib/views.js';
@@ -18,6 +19,10 @@ export function authRouter(): Router {
 		try {
 			const parsed = reqBody(req);
 			const raw = str(parsed.initData, 'initData', { min: 1, trim: false });
+			// Аналитика вход не ломает: кривые поля просто не учитываются.
+			const platform =
+				typeof parsed.platform === 'string' ? parsed.platform.slice(0, 32) : undefined;
+			const from = parsed.from === 'notify' || parsed.from === 'welcome' ? parsed.from : 'direct';
 
 			// Ошибка на любом шаге проверки — 401 без подробностей в теле.
 			const data = verifyInitData(raw);
@@ -37,12 +42,14 @@ export function authRouter(): Router {
 						telegramFirstName: sanitizeIncoming(tg.firstName),
 						telegramLastName: sanitizeIncoming(tg.lastName),
 						languageCode: tg.languageCode,
+						platform,
 					},
 					update: {
 						telegramUsername: tg.username,
 						telegramFirstName: sanitizeIncoming(tg.firstName),
 						telegramLastName: sanitizeIncoming(tg.lastName),
 						languageCode: tg.languageCode,
+						platform,
 						lastSeenAt: new Date(),
 					},
 				});
@@ -55,6 +62,7 @@ export function authRouter(): Router {
 				// Ссылки ведут в чат с ботом, и там же человек заводится и связывается.
 				// start_param остаётся ради старых ссылок из чужих переписок.
 				if (data.startParam) await linkByToken(tx, saved.id, data.startParam);
+				await track(tx, saved.id, 'visit', data.startParam ? 'link' : from);
 
 				return tx.user.findUniqueOrThrow({ where: { id: saved.id } });
 			});

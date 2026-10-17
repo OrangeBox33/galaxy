@@ -9,6 +9,7 @@ import { me as meApi } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { useStore } from '../store';
 import { Avatar } from './Avatar';
+import { flushBeforeLogout, track } from '../analytics';
 
 const GENDER_LABELS: { value: Gender; label: string }[] = [
 	{ value: 'FEMALE', label: 'Женский' },
@@ -101,6 +102,15 @@ export function ProfileSheet({
 					: {}),
 				...(withColors ? { coreColor, flameColor } : {}),
 			});
+			if (
+				withColors &&
+				(coreColor !== (profile!.coreColor ?? DEFAULT_CORE_COLOR) ||
+					flameColor !== (profile!.flameColor ?? DEFAULT_FLAME_COLOR))
+			) {
+				track('color_change', variant === 'colors' ? 'first' : 'profile');
+			}
+			if (variant === 'colors') track('first_colors');
+			if (variant === 'full') track('profile_save');
 			setProfile(updated);
 			previewColors(null);
 			await refreshGraph();
@@ -115,6 +125,8 @@ export function ProfileSheet({
 	async function remove(): Promise<void> {
 		setBusy(true);
 		try {
+			track('account_delete');
+			await flushBeforeLogout();
 			await meApi.remove();
 			window.location.reload();
 		} catch {

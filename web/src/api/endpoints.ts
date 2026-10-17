@@ -1,9 +1,10 @@
 import { api } from './client';
-import type { AdminLink, AdminUser, Graph, Profile } from './types';
+import type { AdminAnalytics, AdminLink, AdminUser, Graph, Profile } from './types';
 import type { Gender } from '../../../shared/config';
 
 export const auth = {
-	telegram: (initData: string) => api.post<Profile>('/auth/telegram', { initData }),
+	telegram: (initData: string, entry: { platform?: string; from?: string | null }) =>
+		api.post<Profile>('/auth/telegram', { initData, ...entry }),
 	logout: () => api.post<void>('/auth/logout'),
 };
 
@@ -37,6 +38,7 @@ export const suggestions = {
 
 export const admin = {
 	users: () => api.get<AdminUser[]>('/admin/users'),
+	analytics: () => api.get<AdminAnalytics>('/admin/analytics'),
 	userLinks: (id: string) => api.get<AdminLink[]>(`/admin/users/${id}/links`),
 	createTest: (payload: { name: string; age?: number | null; gender?: Gender }) =>
 		api.post<{ id: string; name: string }>('/admin/users', payload),

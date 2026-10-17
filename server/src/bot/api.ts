@@ -34,9 +34,14 @@ async function call(method: string, payload: unknown): Promise<unknown> {
 	return data.result;
 }
 
-export const OPEN_MAP_KEYBOARD = {
-	inline_keyboard: [[{ text: '🌌 Открыть карту', web_app: { url: env.publicBaseUrl } }]],
-};
+// from доезжает до входа и говорит аналитике, с какой кнопки открыли карту.
+export function openMapKeyboard(from: 'notify' | 'welcome') {
+	return {
+		inline_keyboard: [
+			[{ text: '🌌 Открыть карту', web_app: { url: `${env.publicBaseUrl}/?from=${from}` } }],
+		],
+	};
+}
 
 export async function sendMessage(
 	chatId: bigint,

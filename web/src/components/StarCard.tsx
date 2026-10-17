@@ -5,6 +5,7 @@ import { playLink } from '../sound';
 import { useStore } from '../store';
 import { ApiError } from '../api/client';
 import { Avatar } from './Avatar';
+import { track } from '../analytics';
 
 function years(n: number) {
 	const tens = n % 100;
@@ -102,7 +103,13 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 			<div className="card__row">
 				<Avatar name={node.name} file={node.avatar} gender={node.gender} size={48} />
 				<div>
-					<div className="card__name" onClick={() => onFocus(node.id)}>
+					<div
+						className="card__name"
+						onClick={() => {
+							track('card_focus');
+							onFocus(node.id);
+						}}
+					>
 						{node.name}
 					</div>
 					<div className="card__meta">
@@ -129,14 +136,23 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 
 			<div className="card__actions">
 				{isMe ? (
-					<button className="btn" onClick={onEditProfile}>
+					<button
+						className="btn"
+						onClick={() => {
+							track('profile_open');
+							onEditProfile();
+						}}
+					>
 						Редактировать профиль
 					</button>
 				) : linked ? (
 					<button
 						className="btn btn--ghost"
 						disabled={busy}
-						onClick={() => void run(() => unlinkFrom(node.id), false)}
+						onClick={() => {
+							track('unlink');
+							void run(() => unlinkFrom(node.id), false);
+						}}
 					>
 						Развязать
 					</button>
@@ -145,6 +161,7 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 						className="btn"
 						disabled={busy || node.isBlocked}
 						onClick={() => {
+							track('link', 'card');
 							playLink(myDegree, node.degree);
 							void run(() => linkWith(node.id), false);
 						}}

@@ -2,6 +2,7 @@ type ThemeParams = { bg_color?: string };
 
 type TelegramWebApp = {
 	initData: string;
+	platform?: string;
 	initDataUnsafe?: { user?: { id: number } };
 	colorScheme?: string;
 	themeParams?: ThemeParams;
