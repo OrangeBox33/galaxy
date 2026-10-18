@@ -34,10 +34,7 @@ export function InviteSheet({ onClose }: { onClose: () => void }) {
 					<>
 						<p className="sheet__hint">{shareText}</p>
 						<div className="linkbox">{url}</div>
-						<small className="sheet__note">
-							Это ваша постоянная ссылка. Отправляйте её кому угодно и сколько угодно
-							раз: каждый, кто откроет её и войдёт, станет звездой рядом с вашей.
-						</small>
+						<small className="sheet__note">Это ваша постоянная ссылка</small>
 						{error && <div className="sheet__error">{error}</div>}
 						<div className="sheet__actions">
 							<button
