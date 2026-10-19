@@ -22,11 +22,14 @@ export function authRouter(): Router {
 			// Аналитика вход не ломает: кривые поля просто не учитываются.
 			const platform =
 				typeof parsed.platform === 'string' ? parsed.platform.slice(0, 32) : undefined;
-			const from = parsed.from === 'notify' || parsed.from === 'welcome' ? parsed.from : 'direct';
 
 			// Ошибка на любом шаге проверки — 401 без подробностей в теле.
 			const data = verifyInitData(raw);
 			if (!data) throw unauthorized();
+
+			// ?from= — у кнопок web_app в уже отправленных сообщениях.
+			const source = data.startParam ?? parsed.from;
+			const from = source === 'notify' || source === 'welcome' ? source : null;
 
 			const tg = data.user;
 			const isNew = (await db.user.count({ where: { id: tg.id } })) === 0;
@@ -61,8 +64,8 @@ export function authRouter(): Router {
 
 				// Ссылки ведут в чат с ботом, и там же человек заводится и связывается.
 				// start_param остаётся ради старых ссылок из чужих переписок.
-				if (data.startParam) await linkByToken(tx, saved.id, data.startParam);
-				await track(tx, saved.id, 'visit', data.startParam ? 'link' : from);
+				if (data.startParam && !from) await linkByToken(tx, saved.id, data.startParam);
+				await track(tx, saved.id, 'visit', from ?? (data.startParam ? 'link' : 'direct'));
 
 				return tx.user.findUniqueOrThrow({ where: { id: saved.id } });
 			});

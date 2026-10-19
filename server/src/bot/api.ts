@@ -34,11 +34,13 @@ async function call(method: string, payload: unknown): Promise<unknown> {
 	return data.result;
 }
 
-// from доезжает до входа и говорит аналитике, с какой кнопки открыли карту.
+// Ссылка startapp, а не кнопка web_app: та открывает обычный режим, а полный
+// экран из BotFather действует только на запуск основного Mini App.
+// from доезжает до входа в start_param и говорит аналитике, откуда открыли карту.
 export function openMapKeyboard(from: 'notify' | 'welcome') {
 	return {
 		inline_keyboard: [
-			[{ text: '🌌 Открыть карту', web_app: { url: `${env.publicBaseUrl}/?from=${from}` } }],
+			[{ text: '🌌 Открыть карту', url: `https://t.me/${env.botUsername}?startapp=${from}` }],
 		],
 	};
 }

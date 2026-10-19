@@ -40,7 +40,7 @@ export function App() {
 
 		auth.telegram(initData(), {
 			platform: webApp()?.platform,
-			// Кнопки бота дописывают ?from=, по нему видно, откуда открыли карту.
+			// ?from= есть только у кнопок в старых сообщениях бота, новые несут его в start_param.
 			from: new URLSearchParams(window.location.search).get('from'),
 		})
 			.then((profile) => {
