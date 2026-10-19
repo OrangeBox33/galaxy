@@ -317,6 +317,27 @@ describe('доступ', () => {
 		const admin = await makeUser(1n, 'Админ');
 		expect((await call('GET', '/api/admin/users', { as: admin })).status).toBe(200);
 	});
+
+	it('админ рвёт пачку связей человека одним запросом', async () => {
+		const admin = await makeUser(1n, 'Админ');
+		const spammer = await makeUser(100n, 'Связывается со всеми');
+		const others = [101n, 102n, 103n];
+		for (const id of others) {
+			await makeUser(id, `Друг ${id}`);
+			await call('POST', '/api/links', { as: spammer, body: { targetId: id.toString() } });
+		}
+
+		const res = await call('POST', `/api/admin/users/${spammer}/unlink`, {
+			as: admin,
+			body: { otherIds: ['101', '103', '999'] },
+		});
+		expect(res.body).toEqual({ removed: 2 });
+
+		const left = await db.link.findMany();
+		expect(left.map((link) => [link.aId, link.bId])).toEqual([[100n, 102n]]);
+		const degrees = await db.user.findMany({ orderBy: { id: 'asc' }, select: { id: true, degree: true } });
+		expect(degrees.map((user) => Number(user.degree))).toEqual([0, 1, 0, 1, 0]);
+	});
 });
 
 describe('профиль', () => {

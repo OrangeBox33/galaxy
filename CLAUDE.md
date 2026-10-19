@@ -459,7 +459,7 @@ Node сообщают сразу, лимиты nginx Node вычитывает �
 ./deploy.sh --fast          пропустить зависимости и миграции принудительно
 ./deploy.sh --full          выполнить их принудительно
 
-cd server && npm test       69 тестов
+cd server && npm test       70 тестов
 ```
 
 Тяжёлые шаги идут, только если изменились `package-lock.json`, `schema.prisma`

@@ -68,6 +68,8 @@ export type AdminLink = {
 	id: string;
 	otherId: string;
 	otherName: string;
+	otherAvatar: string | null;
+	otherGender: Gender;
 	createdAt: string;
 };
 

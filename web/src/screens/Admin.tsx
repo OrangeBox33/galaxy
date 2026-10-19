@@ -4,8 +4,9 @@ import { admin } from '../api/endpoints';
 import { ApiError } from '../api/client';
 import { useStore } from '../store';
 import { Avatar } from '../components/Avatar';
-import type { AdminLink, AdminUser } from '../api/types';
+import type { AdminUser } from '../api/types';
 import { AdminAnalytics } from './AdminAnalytics';
+import { AdminLinks } from './AdminLinks';
 
 type SortKey = 'name' | 'links' | 'createdAt' | 'lastSeenAt' | 'id';
 
@@ -24,7 +25,7 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 	const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'links', desc: true });
 	const [error, setError] = useState<string | null>(null);
 	const [status, setStatus] = useState<string | null>(null);
-	const [openLinks, setOpenLinks] = useState<Record<string, AdminLink[] | 'loading'>>({});
+	const [openLinks, setOpenLinks] = useState<Set<string>>(new Set());
 	const [linkTarget, setLinkTarget] = useState<{ id: string; query: string } | null>(null);
 	const [deleting, setDeleting] = useState<{ id: string; typed: string } | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -95,18 +96,13 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 		}
 	}
 
-	async function showLinks(id: string): Promise<void> {
-		if (openLinks[id]) {
-			setOpenLinks((current) => {
-				const next = { ...current };
-				delete next[id];
-				return next;
-			});
-			return;
-		}
-		setOpenLinks((current) => ({ ...current, [id]: 'loading' }));
-		const rows = await admin.userLinks(id);
-		setOpenLinks((current) => ({ ...current, [id]: rows }));
+	function toggleLinks(id: string): void {
+		setOpenLinks((current) => {
+			const next = new Set(current);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
 	}
 
 	async function recompute(mode: 'full' | 'warm'): Promise<void> {
@@ -265,7 +261,7 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 											))}
 										</select>
 									</td>
-									<td className="clickable" onClick={() => void showLinks(user.id)}>
+									<td className="clickable" onClick={() => toggleLinks(user.id)}>
 										{user.links}
 									</td>
 									<td>{user.isTest ? <span className="badge">тест</span> : ''}</td>
@@ -297,35 +293,17 @@ export function Admin({ onLeave }: { onLeave: () => void }) {
 									</td>
 								</tr>
 
-								{openLinks[user.id] && (
+								{openLinks.has(user.id) && (
 									<tr className="admin__sub">
 										<td colSpan={11}>
-											{openLinks[user.id] === 'loading' ? (
-												'загружаю…'
-											) : (
-												<div className="chips">
-													{(openLinks[user.id] as AdminLink[]).map((link) => (
-														<span className="chip chip--link" key={link.id}>
-															{link.otherName}
-															<button
-																onClick={async () => {
-																	await admin.removeLink(user.id, link.otherId);
-																	await reload();
-																	await refreshGraph();
-																	setOpenLinks((current) => {
-																		const next = { ...current };
-																		delete next[user.id];
-																		return next;
-																	});
-																}}
-															>
-																×
-															</button>
-														</span>
-													))}
-													{(openLinks[user.id] as AdminLink[]).length === 0 && 'связей нет'}
-												</div>
-											)}
+											<AdminLinks
+												userId={user.id}
+												onChanged={async () => {
+													await reload();
+													await refreshGraph();
+												}}
+												onClose={() => toggleLinks(user.id)}
+											/>
 										</td>
 									</tr>
 								)}

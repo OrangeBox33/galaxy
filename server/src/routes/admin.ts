@@ -3,7 +3,7 @@ import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import { AGE_MAX, AGE_MIN, GENDERS } from '../../../shared/config.js';
 import { db } from '../db.js';
-import { conflict, notFound } from '../lib/errors.js';
+import { BadRequest, conflict, notFound } from '../lib/errors.js';
 import { cleanName, displayName } from '../lib/names.js';
 import { normalizePair } from '../lib/pair.js';
 import { bigint, bool, has, int, oneOf, optional, str, body as reqBody } from '../lib/validate.js';
@@ -181,6 +181,7 @@ export function adminRouter(): Router {
 			const links = await db.link.findMany({
 				where: { OR: [{ aId: id }, { bId: id }] },
 				include: { a: true, b: true },
+				orderBy: { createdAt: 'desc' },
 			});
 			res.json(
 				links.map((link) => {
@@ -189,6 +190,8 @@ export function adminRouter(): Router {
 						id: link.id,
 						otherId: other.id.toString(),
 						otherName: displayName(other),
+						otherAvatar: other.avatarFile,
+						otherGender: other.gender,
 						createdAt: link.createdAt.toISOString(),
 					};
 				}),
@@ -323,6 +326,45 @@ export function adminRouter(): Router {
 
 			await audit(req.userId!, 'delete_link', `${aId}-${bId}`);
 			res.status(204).end();
+		} catch (err) {
+			next(err);
+		}
+	});
+
+	router.post('/users/:id/unlink', async (req, res, next) => {
+		try {
+			const id = bigint(req.params.id, 'id');
+			const parsed = reqBody(req);
+			if (!Array.isArray(parsed.otherIds) || parsed.otherIds.length === 0) {
+				throw new BadRequest('otherIds', 'invalid_field', 'Поле otherIds должно быть непустым списком');
+			}
+			const otherIds = [...new Set(parsed.otherIds.map((raw) => bigint(raw, 'otherIds')))];
+
+			const removed = await db.$transaction(async (tx) => {
+				const links = await tx.link.findMany({
+					where: {
+						OR: [
+							{ aId: id, bId: { in: otherIds } },
+							{ bId: id, aId: { in: otherIds } },
+						],
+					},
+				});
+				if (links.length === 0) return [];
+				const others = links.map((link) => (link.aId === id ? link.bId : link.aId));
+				await tx.link.deleteMany({ where: { id: { in: links.map((link) => link.id) } } });
+				await tx.user.update({ where: { id }, data: { degree: { decrement: links.length } } });
+				await tx.user.updateMany({
+					where: { id: { in: others } },
+					data: { degree: { decrement: 1 } },
+				});
+				await markLayoutDirty(tx);
+				return others;
+			});
+
+			await audit(req.userId!, 'delete_links', id.toString(), {
+				otherIds: removed.map(String),
+			});
+			res.json({ removed: removed.length });
 		} catch (err) {
 			next(err);
 		}

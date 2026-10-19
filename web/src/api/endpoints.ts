@@ -48,7 +48,8 @@ export const admin = {
 	) => api.patch<{ id: string; name: string }>(`/admin/users/${id}`, patch),
 	remove: (id: string) => api.del<void>(`/admin/users/${id}`),
 	createLink: (aId: string, bId: string) => api.post<{ ok: true }>('/admin/links', { aId, bId }),
-	removeLink: (aId: string, bId: string) => api.del<void>('/admin/links', { aId, bId }),
+	removeLinks: (id: string, otherIds: string[]) =>
+		api.post<{ removed: number }>(`/admin/users/${id}/unlink`, { otherIds }),
 	recompute: (mode: 'full' | 'warm') =>
 		api.post<{ version: number; nodes: number; ms: number; mode: string }>(
 			'/admin/layout/recompute',

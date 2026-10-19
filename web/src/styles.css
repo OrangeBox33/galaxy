@@ -636,12 +636,53 @@ button {
 	margin-top: 6px;
 }
 
-.chip--link button {
-	margin-left: 6px;
-	border: 0;
-	background: none;
-	color: var(--text-dim);
+.unlink__list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+	gap: 2px 12px;
+	max-height: 50vh;
+	overflow: auto;
+}
+
+.unlink__row {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	padding: 4px 6px;
+	border-radius: 8px;
 	cursor: pointer;
+}
+
+.unlink__row:hover {
+	background: rgba(200, 216, 255, 0.06);
+}
+
+.unlink__row--cut {
+	opacity: 0.45;
+	text-decoration: line-through;
+}
+
+.unlink__name {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.unlink__date {
+	color: var(--text-dim);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.unlink__empty {
+	color: var(--text-dim);
+}
+
+.unlink__bar {
+	display: flex;
+	gap: 8px;
+	margin-top: 10px;
 }
 
 /* ── Возможные друзья ──────────────────────────────────────────────────
