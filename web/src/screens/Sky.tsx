@@ -63,6 +63,14 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 	// и выбора цвета они висели бы поверх первого входа.
 	const firstRun = Boolean(profile?.needsBirth) || sheet === 'intro' || sheet === 'colors';
 
+	function openSuggested(id: string): void {
+		haptic('light');
+		playClick(useStore.getState().graph?.nodes.find((item) => item.id === id)?.degree ?? 0);
+		select({ kind: 'node', id });
+		const renderer = rendererRef.current;
+		renderer?.focusOn(id, renderer.camera.zoom);
+	}
+
 	async function birth(): Promise<void> {
 		const id = profile?.id;
 		if (!id) return;
@@ -263,7 +271,12 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 				</button>
 			</div>
 
-			{!firstRun && <Suggestions starAt={(id) => rendererRef.current?.screenOf(id) ?? null} />}
+			{!firstRun && (
+				<Suggestions
+					starAt={(id) => rendererRef.current?.screenOf(id) ?? null}
+					onOpen={openSuggested}
+				/>
+			)}
 
 			<StarCard
 				onEditProfile={() => setSheet('profile')}

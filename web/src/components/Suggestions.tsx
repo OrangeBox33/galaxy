@@ -115,7 +115,7 @@ function flySpark(from: { x: number; y: number }, to: { x: number; y: number } |
 	setTimeout(remove, FLIGHT_MS + 400);
 }
 
-export function Suggestions({ starAt }: { starAt: StarAt }) {
+export function Suggestions({ starAt, onOpen }: { starAt: StarAt; onOpen: (id: string) => void }) {
 	const graph = useStore((state) => state.graph);
 	const dismissedLocal = useStore((state) => state.dismissedLocal);
 	const linkWith = useStore((state) => state.linkWith);
@@ -268,6 +268,10 @@ export function Suggestions({ starAt }: { starAt: StarAt }) {
 									}
 								: undefined
 						}
+						onClick={(event) => {
+							if (row.exit || (event.target as Element).closest('button')) return;
+							onOpen(row.id);
+						}}
 					>
 						<Avatar name={row.name} file={row.avatar} gender={row.gender} size={30} />
 						<div className="suggest__body">

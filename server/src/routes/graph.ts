@@ -36,6 +36,7 @@ export function graphRouter(): Router {
 				nodes: users.map((user) => ({
 					id: user.id.toString(),
 					name: displayName(user),
+					username: user.telegramUsername,
 					gender: user.gender,
 					age: user.age,
 					degree: user.degree,

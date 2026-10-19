@@ -21,6 +21,7 @@ export type Profile = {
 export type GraphNode = {
 	id: string;
 	name: string;
+	username?: string | null;
 	gender: Gender;
 	age: number | null;
 	degree: number;

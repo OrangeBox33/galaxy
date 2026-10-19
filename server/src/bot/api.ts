@@ -63,19 +63,26 @@ export async function sendMessage(
 // CDN обрезан на 320 px, здесь доступны все размеры, вплоть до 640. Работает
 // только для тех, у кого с ботом есть чат, — то есть после «Запустить».
 export async function profilePhotoUrl(userId: bigint): Promise<string | null> {
+	const [first] = await profilePhotoIds(userId, 1);
+	return first ? fileUrl(first) : null;
+}
+
+// file_id самого крупного размера каждого фото, от свежего к старому.
+export async function profilePhotoIds(userId: bigint, limit: number): Promise<string[]> {
 	const photos = (await call('getUserProfilePhotos', {
 		user_id: Number(userId),
-		limit: 1,
+		limit,
 	})) as { photos?: { file_id: string }[][] };
 
-	const sizes = photos.photos?.[0];
-	if (!sizes?.length) return null;
+	return (photos.photos ?? [])
+		.filter((sizes) => sizes.length > 0)
+		.map((sizes) => sizes[sizes.length - 1].file_id);
+}
 
-	const file = (await call('getFile', { file_id: sizes[sizes.length - 1].file_id })) as {
-		file_path?: string;
-	};
+// В адресе токен бота: наружу он не отдаётся, только скачивается сервером.
+export async function fileUrl(fileId: string): Promise<string | null> {
+	const file = (await call('getFile', { file_id: fileId })) as { file_path?: string };
 	if (!file.file_path) return null;
-
 	return `${BASE.replace('/bot', '/file/bot')}/${file.file_path}`;
 }
 

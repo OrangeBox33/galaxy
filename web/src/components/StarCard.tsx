@@ -5,6 +5,8 @@ import { playLink } from '../sound';
 import { useStore } from '../store';
 import { ApiError } from '../api/client';
 import { Avatar } from './Avatar';
+import { Gallery } from './Gallery';
+import { openTelegramProfile } from '../telegram/webapp';
 import { track } from '../analytics';
 
 function years(n: number) {
@@ -62,6 +64,7 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 	const unlinkFrom = useStore((state) => state.unlinkFrom);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [gallery, setGallery] = useState<string | null>(null);
 	const neighbours = useMemo(() => neighbourMap(graph?.edges ?? []), [graph?.edges]);
 
 	if (!graph || !selection) return null;
@@ -101,7 +104,13 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 				×
 			</button>
 			<div className="card__row">
-				<Avatar name={node.name} file={node.avatar} gender={node.gender} size={48} />
+				{node.avatar ? (
+					<button className="card__photo" onClick={() => setGallery(node.id)}>
+						<Avatar name={node.name} file={node.avatar} gender={node.gender} size={48} />
+					</button>
+				) : (
+					<Avatar name={node.name} file={node.avatar} gender={node.gender} size={48} />
+				)}
 				<div>
 					<div
 						className="card__name"
@@ -112,6 +121,14 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 					>
 						{node.name}
 					</div>
+					{node.username && (
+						<button
+							className="card__username"
+							onClick={() => openTelegramProfile(node.username!)}
+						>
+							@{node.username}
+						</button>
+					)}
 					<div className="card__meta">
 						{node.gender !== 'UNSPECIFIED' && (
 							<span>
@@ -171,6 +188,9 @@ export function StarCard({ onEditProfile, onFocus }: Props) {
 				)}
 			</div>
 			{error && <div className="card__error">{error}</div>}
+			{gallery === node.id && (
+				<Gallery userId={node.id} avatar={node.avatar} onClose={() => setGallery(null)} />
+			)}
 		</div>
 	);
 }

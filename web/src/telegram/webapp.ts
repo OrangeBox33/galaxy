@@ -55,6 +55,16 @@ export function openShare(url: string, text: string): void {
 	window.open(share, '_blank');
 }
 
+export function openTelegramProfile(username: string): void {
+	const url = `https://t.me/${encodeURIComponent(username)}`;
+	const app = webApp();
+	if (app) {
+		app.openTelegramLink(url);
+		return;
+	}
+	window.open(url, '_blank');
+}
+
 export function haptic(style: 'light' | 'medium' = 'light'): void {
 	webApp()?.HapticFeedback?.impactOccurred(style);
 }

@@ -193,6 +193,24 @@ button {
 	cursor: pointer;
 }
 
+.card__photo {
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: none;
+	cursor: zoom-in;
+}
+
+.card__username {
+	display: block;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--accent);
+	font-size: 13px;
+	cursor: pointer;
+}
+
 .card__meta {
 	color: var(--text-dim);
 	font-size: 13px;
@@ -730,6 +748,7 @@ button {
 	backdrop-filter: blur(12px);
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 	overflow: hidden;
+	cursor: pointer;
 	animation: suggest-in 450ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
@@ -910,4 +929,99 @@ button {
 
 .admin__table--compact {
 	width: auto;
+}
+
+/* ── Галерея фото профиля ─────────────────────────────────────────── */
+.gallery {
+	position: fixed;
+	inset: 0;
+	z-index: 30;
+	background: rgba(4, 6, 14, 0.94);
+}
+
+.gallery__viewport {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	touch-action: none;
+	user-select: none;
+}
+
+.gallery__track {
+	display: flex;
+	height: 100%;
+	transition: transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.gallery__track--drag {
+	transition: none;
+}
+
+.gallery__slide {
+	flex: 0 0 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+}
+
+.gallery__frame {
+	position: relative;
+	width: min(100vw, 100vh, 640px);
+	aspect-ratio: 1;
+}
+
+.gallery__frame img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	pointer-events: none;
+}
+
+.gallery__frame .gallery__photo {
+	opacity: 0;
+}
+
+.gallery__frame .gallery__photo--loaded {
+	opacity: 1;
+	transition: opacity 200ms ease;
+}
+
+.gallery__dots {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: max(20px, env(safe-area-inset-bottom));
+	display: flex;
+	justify-content: center;
+	gap: 6px;
+	pointer-events: none;
+}
+
+.gallery__dots span {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: rgba(200, 216, 255, 0.3);
+}
+
+.gallery__dots .gallery__dot--on {
+	background: rgba(255, 255, 255, 0.9);
+}
+
+.gallery__close {
+	position: absolute;
+	top: var(--top-pad);
+	right: 12px;
+	width: 40px;
+	height: 40px;
+	border: 0;
+	border-radius: 50%;
+	background: rgba(200, 216, 255, 0.16);
+	color: inherit;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
 }

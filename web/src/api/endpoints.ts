@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, apiUrl } from './client';
 import type { AdminAnalytics, AdminLink, AdminUser, Graph, Profile } from './types';
 import type { Gender } from '../../../shared/config';
 
@@ -30,6 +30,11 @@ export const graph = {
 export const links = {
 	create: (targetId: string) => api.post<{ ok: true }>('/links', { targetId }),
 	remove: (targetId: string) => api.del<void>(`/links/${targetId}`),
+};
+
+export const photos = {
+	count: (userId: string) => api.get<{ count: number }>(`/photos/${userId}`),
+	url: (userId: string, index: number) => apiUrl(`/photos/${userId}/${index}`),
 };
 
 export const suggestions = {
