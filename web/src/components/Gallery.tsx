@@ -56,7 +56,10 @@ export function Gallery({ userId, avatar, onClose }: Props) {
 		if (Math.abs(dx) > width * SWIPE && Math.abs(dx) > Math.abs(dy)) {
 			go(dx < 0 ? 1 : -1);
 		} else if (Math.abs(dx) < 8 && Math.abs(dy) < 8) {
-			go(event.clientX < width / 2 ? -1 : 1);
+			// Не event.target: при захвате указателя он всегда сама галерея.
+			const hit = document.elementFromPoint(event.clientX, event.clientY);
+			if (hit?.closest('.gallery__frame')) go(event.clientX < width / 2 ? -1 : 1);
+			else onClose();
 		}
 	}
 
