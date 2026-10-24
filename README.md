@@ -89,16 +89,12 @@ npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma 
 
 ## Сервер
 
-VPS `root@193.124.203.221`, Ubuntu 20.04. Рядом живут два чужих проекта, которые мы
-не трогаем: `kvadrat` (порт 3500, корень домена) и `textbin` (порт 8090, `/textbin`).
-Наш процесс — `galaxy` на порту 3005.
+VPS `root@185.228.232.194`, Ubuntu 24.04. Рядом живут чужие проекты, которые мы
+не трогаем: `kvadrat` (порт 3500, корень домена), `textbin` (порт 8090, `/textbin`),
+`rjd` (порт 3010, `/rjd`). Наш процесс — `galaxy` на порту 3005.
 
-Node и pm2 поставлены через nvm, а неинтерактивный ssh не читает профиль, поэтому
-каждая удалённая команда начинается с подгрузки nvm:
-
-```bash
-export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh";
-```
+Node 24 стоит системно (NodeSource), pm2 — глобально через npm, так что
+неинтерактивный ssh видит их без всякой преамбулы.
 
 ### Разовая настройка
 
@@ -110,15 +106,12 @@ export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh";
 
 1. ставит pm2, если его нет, и включает автозапуск после ребута;
 2. создаёт `/root/dev/galaxy/{avatars,dist}` и `/root/backups`;
-3. ставит PostgreSQL 16 и заводит роль и базу `galaxy`;
+3. ставит PostgreSQL 18 и заводит роль и базу `galaxy`;
 4. проверяет, что кластер в UTF-8 и слушает только localhost;
 5. кладёт `backup.sh` и добавляет его в крон.
 
-PostgreSQL ставится **из архива PGDG** (`apt-archive.postgresql.org`): в штатном
-репозитории Ubuntu 20.04 есть только версия 12, а основной репозиторий PGDG больше
-не собирает пакеты под focal — эта версия системы отжила свой срок в мае 2025.
-При переезде на Ubuntu 24 достаточно поменять в `deploy/setup-server.sh` хост
-и кодовое имя репозитория на `noble-pgdg` и обновить пакеты.
+PostgreSQL ставится **из PGDG** (`apt.postgresql.org`, `noble-pgdg`): в штатном
+репозитории Ubuntu 24.04 есть только версия 16.
 
 Кластер общесерверный: у каждого проекта своя роль и своя база, приложение никогда
 не подключается суперпользователем `postgres`, глобальные настройки не трогает.
@@ -224,7 +217,7 @@ LAYOUT_RECOMPUTE_DEBOUNCE_MS=4000
 
 ```bash
 # 1. Погасить приложение, чтобы оно не писало в базу во время восстановления.
-export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; pm2 stop galaxy
+pm2 stop galaxy
 
 # 2. Пересоздать базу пустой.
 sudo -u postgres psql -c "DROP DATABASE galaxy;"

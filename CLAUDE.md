@@ -45,14 +45,13 @@
 | Слой       | Что использовано                                                 |
 | ---------- | ---------------------------------------------------------------- |
 | Клиент     | React 18 + TypeScript, Vite, zustand; рендер — Canvas 2D вручную |
-| Сервер     | Node 22 + Express 4 + TypeScript, Prisma, PostgreSQL 16          |
+| Сервер     | Node 24 + Express 4 + TypeScript, Prisma, PostgreSQL 18          |
 | Процесс    | pm2, один инстанс `galaxy` на порту 3005                         |
 | Веб-сервер | nginx проксирует `/galaxy/` на Node; статику раздаёт сам Node    |
 
 Контейнеров нет. Запрещены и не используются: Next.js, Fastify, NestJS, Redis,
-очереди, GraphQL, **zod и любые библиотеки схемной валидации**. PostgreSQL 16
-стоит из архива PGDG: в Ubuntu 20.04 штатно только 12, а основной репозиторий
-PGDG под focal больше не собирает.
+очереди, GraphQL, **zod и любые библиотеки схемной валидации**. PostgreSQL 18
+стоит из PGDG: в Ubuntu 24.04 штатно только 16.
 
 `shared/` — общий код клиента и сервера: `config.ts` (BASE_PATH и константы,
 один источник истины), `prng.ts`, `suggest.ts`, `layout/` (вся математика).
@@ -466,12 +465,10 @@ cd server && npm test       70 тестов
 Тяжёлые шаги идут, только если изменились `package-lock.json`, `schema.prisma`
 или миграции (слепок на сервере в `.deploy-state`); обычный выкат — 20 секунд.
 
-**node стоит через nvm, а неинтерактивный ssh не читает профиль**, поэтому
-снаружи каждой команде нужна преамбула — та же, что в `deploy.sh:46`:
+Node 24 и pm2 на сервере стоят системно, команды снаружи идут без преамбулы:
 
 ```bash
-ssh root@193.124.203.221 'export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; \
-  cd /root/dev/galaxy/dist && node server/src/lib/snapshot.js list'
+ssh root@185.228.232.194 'cd /root/dev/galaxy/dist && node server/src/lib/snapshot.js list'
 ```
 
 Изнутри сервера, из `/root/dev/galaxy/dist`, хватает самих команд:

@@ -9,7 +9,7 @@
 #
 set -euo pipefail
 
-REMOTE="${GALAXY_REMOTE:-root@193.124.203.221}"
+REMOTE="${GALAXY_REMOTE:-root@185.228.232.194}"
 ENV_FILE="${GALAXY_REMOTE_DIR:-/root/dev/galaxy/dist}/.env"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="${1:-$ROOT/dumps/galaxy-$(date +%F-%H%M).dump}"

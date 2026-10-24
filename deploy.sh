@@ -34,7 +34,7 @@
 
 set -euo pipefail
 
-REMOTE="${GALAXY_REMOTE:-root@193.124.203.221}"
+REMOTE="${GALAXY_REMOTE:-root@185.228.232.194}"
 REMOTE_DIR="${GALAXY_REMOTE_DIR:-/root/dev/galaxy/dist}"
 REMOTE_HOME_DIR="$(dirname "$REMOTE_DIR")"
 APP_NAME="galaxy"
@@ -44,10 +44,6 @@ NGINX_SNIPPET="/etc/nginx/snippets/nikitosfrolov/galaxy.conf"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STAGE="$ROOT/.deploy"
-
-# node/npm/pm2 на сервере стоят через nvm, а неинтерактивный ssh не читает профиль,
-# поэтому каждую удалённую команду начинаем с подгрузки nvm.
-REMOTE_ENV='export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh";'
 
 BUILD=1
 DRY_RUN=0
@@ -63,7 +59,7 @@ die() {
 	exit 1
 }
 
-remote() { ssh "$REMOTE" "$REMOTE_ENV $*"; }
+remote() { ssh "$REMOTE" "$*"; }
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -170,7 +166,7 @@ fi
 if [ "$MODE" = "logs" ]; then
 	say "Логи $APP_NAME (Ctrl+C чтобы выйти)"
 	# -t: интерактивный tty, иначе Ctrl+C не дойдёт до pm2
-	ssh -t "$REMOTE" "$REMOTE_ENV pm2 logs $APP_NAME --lines 100"
+	ssh -t "$REMOTE" "pm2 logs $APP_NAME --lines 100"
 	exit 0
 fi
 

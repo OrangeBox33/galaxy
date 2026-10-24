@@ -12,10 +12,8 @@ set -euo pipefail
 if command -v psql >/dev/null 2>&1; then
 	echo "    PostgreSQL уже установлен: $(psql --version)"
 else
-	echo "    Ставлю PostgreSQL 16 из архива PGDG"
-	# Основной репозиторий PGDG больше не собирает пакеты под Ubuntu 20.04
-	# (focal EOL с мая 2025), поэтому берём сборки из архива. При переезде
-	# на Ubuntu 24 достаточно поменять здесь хост и кодовое имя на noble-pgdg.
+	echo "    Ставлю PostgreSQL 18 из PGDG"
+	# В штатном репозитории Ubuntu 24.04 только 16-я версия, поэтому берём из PGDG.
 	export DEBIAN_FRONTEND=noninteractive
 	# Список PGDG переписываем до общего update: неверный файл, оставшийся
 	# от прошлой попытки, уронил бы apt-get update целиком.
@@ -26,11 +24,11 @@ else
 	curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
 		-o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
 	echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-https://apt-archive.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
 		> /etc/apt/sources.list.d/pgdg.list
 	apt-get update -qq -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/pgdg.list \
 		-o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
-	apt-get install -y -qq postgresql-16 postgresql-contrib-16 >/dev/null
+	apt-get install -y -qq postgresql-18 >/dev/null
 	echo "    Поставлен: $(psql --version)"
 fi
 
