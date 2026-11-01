@@ -119,6 +119,8 @@ function toGraph(layout: LayoutResult): Graph {
 		nodes,
 		edges: allEdges().map(([a, b]) => [String(a), String(b)] as [string, string]),
 		dismissed: [],
+		hubs: [],
+		hubLimit: 0,
 	};
 }
 

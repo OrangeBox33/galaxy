@@ -118,6 +118,8 @@ function flySpark(from: { x: number; y: number }, to: { x: number; y: number } |
 export function Suggestions({ starAt, onOpen }: { starAt: StarAt; onOpen: (id: string) => void }) {
 	const graph = useStore((state) => state.graph);
 	const dismissedLocal = useStore((state) => state.dismissedLocal);
+	const hubsLocal = useStore((state) => state.hubsLocal);
+	const markHub = useStore((state) => state.markHub);
 	const linkWith = useStore((state) => state.linkWith);
 	const dismissSuggestion = useStore((state) => state.dismissSuggestion);
 
@@ -134,11 +136,6 @@ export function Suggestions({ starAt, onOpen }: { starAt: StarAt; onOpen: (id: s
 
 	const dismissed = new Set<string>([...(graph?.dismissed ?? []), ...dismissedLocal]);
 	const ranked = graph ? suggestFriends(graph, dismissed) : [];
-	const hubs = useMemo(
-		() =>
-			graph ? suggestHubs(graph, new Set([...(graph.dismissed ?? []), ...dismissedLocal])) : [],
-		[graph, dismissedLocal],
-	);
 	const nodes = new Map((graph?.nodes ?? []).map((node) => [node.id, node]));
 
 	const friends = new Set<string>();
@@ -146,6 +143,32 @@ export function Suggestions({ starAt, onOpen }: { starAt: StarAt; onOpen: (id: s
 		if (a === graph?.me) friends.add(b);
 		if (b === graph?.me) friends.add(a);
 	}
+
+	// Уже выданную добивку показываем, пока она жива, даже если в своей компании
+	// она больше не самая связная: иначе лимит тратился бы на перестановки.
+	const offered = new Set([...(graph?.hubs ?? []), ...hubsLocal]);
+	const candidates = useMemo(
+		() =>
+			graph
+				? suggestHubs(graph, new Set([...(graph.dismissed ?? []), ...dismissedLocal]))
+				: [],
+		[graph, dismissedLocal],
+	);
+	const hubs = [
+		...[...offered]
+			.map((id) => nodes.get(id))
+			.filter(
+				(node): node is NonNullable<typeof node> =>
+					!!node && !node.isBlocked && !friends.has(node.id) && !dismissed.has(node.id),
+			)
+			.sort((x, y) => y.degree - x.degree || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0)),
+		...candidates
+			.filter((node) => !offered.has(node.id))
+			.slice(0, Math.max(0, (graph?.hubLimit ?? 0) - offered.size)),
+	];
+	// «Нет» место в стопке не освобождает: иначе за отказом сразу прилетала замена,
+	// и окно перебирало всё небо.
+	const capacity = Math.max(0, VISIBLE - dismissedLocal.length);
 
 	// Падение числа общих друзей — не повод убрать карточку; догорающую не трогаем вовсе.
 	function keep(row: Row): boolean {
@@ -185,12 +208,16 @@ export function Suggestions({ starAt, onOpen }: { starAt: StarAt; onOpen: (id: s
 				.map((node) => row(node, true)),
 		];
 
-		const exiting = current.filter((item) => item.exit).length;
-		const next = order.slice(0, Math.max(0, VISIBLE - exiting));
+		// Отказ уже вычтен из capacity, держать за ним место второй раз не нужно.
+		const held = current.filter(
+			(item) => item.exit && !dismissedLocal.includes(item.id),
+		).length;
+		const room = Math.max(0, capacity - held);
+		const next = order.slice(0, room);
 		current.forEach((item, i) => {
 			if (item.exit) next.splice(i, 0, item);
 		});
-		for (const item of order.slice(next.length - exiting)) {
+		for (const item of order.slice(room)) {
 			if (shown.has(item.id)) next.push({ ...item, exit: { mode: 'fade', fx: '50%', fy: '50%' } });
 		}
 		return next;
@@ -205,7 +232,11 @@ export function Suggestions({ starAt, onOpen }: { starAt: StarAt; onOpen: (id: s
 	});
 
 	useEffect(() => {
-		for (const row of rows) if (!row.exit) trackOnce(`suggest:${row.id}`, 'suggest_shown');
+		for (const row of rows) {
+			if (row.exit) continue;
+			trackOnce(`suggest:${row.id}`, 'suggest_shown');
+			if (row.hub && !offered.has(row.id)) markHub(row.id);
+		}
 	}, [rows]);
 
 	useEffect(() => {

@@ -94,6 +94,8 @@ function build(): Graph {
 		nodes,
 		edges: edges.map(([a, b]) => [String(a), String(b)] as [string, string]),
 		dismissed: [],
+		hubs: [],
+		hubLimit: 0,
 	};
 }
 

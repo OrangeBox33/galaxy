@@ -54,6 +54,12 @@ model User {
   // старт) стоит false — они тоже увидят рождение, хотя звезда уже на небе.
   bornSeen Boolean @default(false)
 
+  // Сколько раз за жизнь добить окно возможных друзей самыми связными: это
+  // разогрев новичка, дальше добивка лишь перебирает всё небо — доходило
+  // до 30 отказов из 40 звёзд. Тем, у кого к запуску лимита было больше трёх
+  // друзей, миграция поставила 0.
+  hubLimit Int @default(5)
+
   isTest    Boolean @default(false)
   isBlocked Boolean @default(false) // не пускаем в приложение, звезда гаснет
 
@@ -79,6 +85,7 @@ model User {
 
   dismissalsMade SuggestionDismissal[] @relation("DismissalOwner")
   dismissedBy    SuggestionDismissal[] @relation("DismissalTarget")
+  hubsOffered    SuggestionHub[]
 
   outbox      BotOutbox[] @relation("OutboxRecipient")
   outboxActed BotOutbox[] @relation("OutboxActor")
@@ -113,6 +120,18 @@ model SuggestionDismissal {
 
   @@id([userId, targetId])
   @@index([userId])
+}
+
+// Кого человеку уже предлагали добивкой, не больше User.hubLimit. На targetId
+// нет внешнего ключа: удалённый аккаунт не должен
+// освобождать место под новую добивку.
+model SuggestionHub {
+  userId    BigInt
+  targetId  BigInt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, targetId])
 }
 
 // События для уведомлений бота. Текст складывается при отправке: несколько

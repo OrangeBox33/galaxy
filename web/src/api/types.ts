@@ -47,6 +47,9 @@ export type Graph = {
 	edges: [string, string][];
 	// Кому этот человек уже сказал «нет» в окне возможных друзей.
 	dismissed: string[];
+	// Кого уже предлагали добивкой: их не больше hubLimit за всю жизнь.
+	hubs: string[];
+	hubLimit: number;
 };
 
 export type AdminUser = {

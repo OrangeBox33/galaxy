@@ -51,6 +51,8 @@ function buildGraph(): Graph {
 		nodes,
 		edges: [],
 		dismissed: [],
+		hubs: [],
+		hubLimit: 0,
 	};
 }
 

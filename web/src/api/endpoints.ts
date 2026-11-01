@@ -39,6 +39,7 @@ export const photos = {
 
 export const suggestions = {
 	dismiss: (targetId: string) => api.post<void>('/suggestions/dismiss', { targetId }),
+	hub: (targetId: string) => api.post<void>('/suggestions/hub', { targetId }),
 };
 
 export const admin = {

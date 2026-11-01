@@ -1,5 +1,5 @@
 // Возможные друзья: сама математика лежит в shared (её крутит клиент),
-// на сервере живёт только память об отказах.
+// на сервере живёт только память об отказах и выданной добивке.
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import jwt from 'jsonwebtoken';
@@ -85,16 +85,27 @@ describe('добивка самыми связными', () => {
 		isBlocked: false,
 	}));
 
-	it('по одному из каждой компании, связные выше, одиночек нет', () => {
+	it('сначала лучший из каждой компании, потом вторые; одиночек нет', () => {
 		const out = suggestHubs({ me: '1', nodes, edges }, new Set());
 
-		expect(out.map((node) => node.id)).toEqual(['3', '7', '11']);
+		expect(out.map((node) => node.id)).toEqual(['3', '7', '11', '4', '8', '10', '9', '12', '5', '6']);
 	});
 
 	it('отказ уступает место следующему в той же компании', () => {
 		const out = suggestHubs({ me: '1', nodes, edges }, new Set(['3', '7']));
 
-		expect(out.map((node) => node.id)).toEqual(['11', '4', '8']);
+		expect(out.map((node) => node.id).slice(0, 3)).toEqual(['11', '4', '8']);
+	});
+
+	it('когда компания одна, окно всё равно добивается до трёх', () => {
+		const single = edges.slice(0, 5);
+		const alone = nodes.map((node) => ({
+			...node,
+			degree: single.filter(([a, b]) => a === node.id || b === node.id).length,
+		}));
+		const out = suggestHubs({ me: '1', nodes: alone, edges: single }, new Set());
+
+		expect(out.map((node) => node.id)).toEqual(['3', '4', '5']);
 	});
 });
 
@@ -115,6 +126,7 @@ describe('отказы', () => {
 
 	beforeEach(async () => {
 		await db.suggestionDismissal.deleteMany();
+		await db.suggestionHub.deleteMany();
 		await db.link.deleteMany();
 		await db.botOutbox.deleteMany();
 		await db.user.deleteMany();
@@ -176,5 +188,42 @@ describe('отказы', () => {
 		const ghost = await call('POST', '/api/suggestions/dismiss', { as: 100n, body: { targetId: '999' } });
 		expect(ghost.status).toBe(404);
 		expect(await db.suggestionDismissal.count()).toBe(0);
+	});
+
+	it('добивка запоминается, но не больше hubLimit', async () => {
+		await db.user.create({ data: { id: 100n, customName: 'Я', hubLimit: 5 } });
+		const ids = Array.from({ length: 6 }, (_, i) => BigInt(200 + i));
+		for (const id of ids) await db.user.create({ data: { id, customName: `${id}` } });
+
+		const results = await Promise.all(
+			ids.map((id) =>
+				call('POST', '/api/suggestions/hub', { as: 100n, body: { targetId: id.toString() } }),
+			),
+		);
+
+		expect(results.filter((res) => res.status === 204)).toHaveLength(5);
+		expect(results.filter((res) => res.status === 409)).toHaveLength(1);
+		const graph = await call('GET', '/api/graph', { as: 100n });
+		expect(graph.body.hubs).toHaveLength(5);
+		expect(graph.body.hubLimit).toBe(5);
+	});
+
+	it('повторная запись той же добивки лимит не тратит', async () => {
+		await db.user.create({ data: { id: 100n, customName: 'Я' } });
+		await db.user.create({ data: { id: 200n, customName: 'Ты' } });
+
+		for (let i = 0; i < 3; i++) {
+			const res = await call('POST', '/api/suggestions/hub', { as: 100n, body: { targetId: '200' } });
+			expect(res.status).toBe(204);
+		}
+		expect(await db.suggestionHub.count()).toBe(1);
+	});
+
+	it('при нулевом лимите добивки нет', async () => {
+		await db.user.create({ data: { id: 100n, customName: 'Я', hubLimit: 0 } });
+		await db.user.create({ data: { id: 200n, customName: 'Ты' } });
+
+		const res = await call('POST', '/api/suggestions/hub', { as: 100n, body: { targetId: '200' } });
+		expect(res.status).toBe(409);
 	});
 });

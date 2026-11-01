@@ -29,12 +29,15 @@ type State = {
 
 	// Отказы этого сеанса: сервер вернёт их лишь следующим опросом, а карточка уходит сразу.
 	dismissedLocal: string[];
+	// Добивка, показанная в этом сеансе: сервер вернёт её лишь следующим опросом.
+	hubsLocal: string[];
 
 	setProfile: (profile: Profile | null) => void;
 	refreshProfile: () => Promise<void>;
 	refreshGraph: () => Promise<void>;
 	linkWith: (targetId: string) => Promise<void>;
 	dismissSuggestion: (targetId: string) => Promise<void>;
+	markHub: (targetId: string) => void;
 	unlinkFrom: (targetId: string) => Promise<void>;
 	previewColors: (colors: { core: string; flame: string } | null) => void;
 	select: (selection: Selection) => void;
@@ -122,6 +125,7 @@ export const useStore = create<State>((set, get) => {
 		prediction: null,
 		colorPreview: null,
 		dismissedLocal: [],
+		hubsLocal: [],
 
 		setProfile: (profile) => set({ profile }),
 
@@ -172,6 +176,14 @@ export const useStore = create<State>((set, get) => {
 				// Не сохранилось — пусть подсказка вернётся, чем потеряться молча.
 				set({ dismissedLocal: before, error: (err as Error).message });
 			}
+		},
+
+		markHub: (targetId) => {
+			const before = get().hubsLocal;
+			if (before.includes(targetId)) return;
+			set({ hubsLocal: [...before, targetId] });
+			// Запись не удалась — карточка уже на экране, учтём её хотя бы до конца сеанса.
+			void suggestionsApi.hub(targetId).catch(() => {});
 		},
 
 		unlinkFrom: async (targetId) => {

@@ -16,7 +16,7 @@ export function graphRouter(): Router {
 		try {
 			const userId = req.userId!;
 
-			const [users, links, dismissed, layoutVersion, layoutScale] = await Promise.all([
+			const [users, links, dismissed, hubs, layoutVersion, layoutScale] = await Promise.all([
 				db.user.findMany({ orderBy: { id: 'asc' } }),
 				db.link.findMany({ select: { aId: true, bId: true } }),
 				// Кого этот человек отклонил в окне возможных друзей: клиент
@@ -25,6 +25,7 @@ export function graphRouter(): Router {
 					where: { userId },
 					select: { targetId: true },
 				}),
+				db.suggestionHub.findMany({ where: { userId }, select: { targetId: true } }),
 				getLayoutVersion(),
 				getLayoutScale(),
 			]);
@@ -52,6 +53,8 @@ export function graphRouter(): Router {
 				})),
 				edges: links.map((link) => [link.aId.toString(), link.bId.toString()]),
 				dismissed: dismissed.map((row) => row.targetId.toString()),
+				hubs: hubs.map((row) => row.targetId.toString()),
+				hubLimit: users.find((user) => user.id === userId)?.hubLimit ?? 0,
 			});
 		} catch (err) {
 			next(err);

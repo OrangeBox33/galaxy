@@ -68,9 +68,10 @@ export function suggestFriends<T extends SuggestNode>(
 	return out;
 }
 
-// Добивка, когда друзей друзей не хватает: самый связный незнакомец из каждой
-// компании, по одному на компанию, чтобы не предлагать троих из одной.
-// Одиночек без связей не предлагаем: знакомить с ними некому.
+// Добивка, когда друзей друзей не хватает: сначала самый связный незнакомец
+// из каждой компании, потом вторые по связности и так далее — чтобы не
+// предлагать троих из одной, но и не оставлять окно с одной карточкой, когда
+// компаний на небе мало. Одиночек без связей не предлагаем: знакомить не с кем.
 export function suggestHubs<T extends SuggestNode>(
 	graph: SuggestGraph<T>,
 	dismissed: ReadonlySet<string>,
@@ -93,15 +94,22 @@ export function suggestHubs<T extends SuggestNode>(
 	for (const list of neighbours) list.sort((x, y) => x - y);
 
 	const { cluster } = findClusters(neighbours, CLUSTER_ITERATIONS);
-	const best = new Map<number, T>();
+	const byDegree = (x: T, y: T) => y.degree - x.degree || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0);
+	const groups = new Map<number, T[]>();
 	nodes.forEach((node, i) => {
 		if (node.id === graph.me || mine.has(node.id) || node.isBlocked || dismissed.has(node.id)) return;
 		if (node.degree === 0) return;
-		const held = best.get(cluster[i]);
-		if (!held || node.degree > held.degree) best.set(cluster[i], node);
+		const group = groups.get(cluster[i]);
+		if (group) group.push(node);
+		else groups.set(cluster[i], [node]);
 	});
+	for (const group of groups.values()) group.sort(byDegree);
 
-	return [...best.values()].sort(
-		(x, y) => y.degree - x.degree || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0),
-	);
+	const out: T[] = [];
+	for (let rank = 0; ; rank++) {
+		const round = [...groups.values()].flatMap((group) => group[rank] ?? []);
+		if (round.length === 0) break;
+		out.push(...round.sort(byDegree));
+	}
+	return out;
 }
