@@ -51,6 +51,8 @@ export const env = Object.freeze({
 	botToken: str('TELEGRAM_BOT_TOKEN'),
 	botUsername: str('TELEGRAM_BOT_USERNAME').replace(/^@/, ''),
 	webhookSecret: str('TELEGRAM_WEBHOOK_SECRET'),
+	// Без токена Макс выключен целиком: локально и в тестах он не нужен.
+	maxBotToken: process.env.MAX_BOT_TOKEN?.trim() || '',
 	sessionSecret: str('SESSION_SECRET'),
 	adminId: telegramId('TELEGRAM_ADMIN_ID'),
 	avatarDir: str('AVATAR_DIR'),

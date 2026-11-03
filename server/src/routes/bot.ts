@@ -18,7 +18,7 @@ function secretMatches(candidate: string): boolean {
 	return timingSafeEqual(a, b);
 }
 
-const GREETING =
+export const GREETING =
 	'Привет!😉\n' +
 	'Это динамическая карта звёздного неба, где каждый человек — звезда, ' +
 	'а знакомства — линии между ними.\n\n' +

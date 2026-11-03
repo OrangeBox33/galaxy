@@ -1,5 +1,6 @@
 // Схема данных «Galaxy». Раздел 3 ТЗ.
-// BigInt-идентификаторы равны Telegram user id; в JSON они всегда отдаются строками.
+// BigInt-идентификаторы равны Telegram user id, у людей из Макса — MAX_ID_OFFSET + id
+// в Максе; в JSON они всегда отдаются строками.
 
 generator client {
   provider = "prisma-client-js"
@@ -25,6 +26,7 @@ enum OutboxStatus {
 
 model User {
   id                BigInt  @id // = Telegram user id; тестовые — отрицательные
+  maxId             BigInt? @unique // пришёл из Макса; имя и фамилия тогда тоже оттуда
   telegramUsername  String?
   telegramFirstName String?
   telegramLastName  String?

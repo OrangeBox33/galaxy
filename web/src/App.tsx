@@ -3,7 +3,14 @@ import { BASE_PATH } from '../../shared/config';
 import { auth } from './api/endpoints';
 import { ApiError } from './api/client';
 import { useStore } from './store';
-import { initData, isInsideTelegram, prepareWebApp, webApp } from './telegram/webapp';
+import {
+	initData,
+	isInsideMessenger,
+	loadBridge,
+	messenger,
+	platform,
+	prepareWebApp,
+} from './telegram/webapp';
 import { startAnalytics } from './analytics';
 import { Sky } from './screens/Sky';
 import { Admin } from './screens/Admin';
@@ -28,22 +35,25 @@ export function App() {
 	}, []);
 
 	useEffect(() => {
-		prepareWebApp();
+		void loadBridge().then(() => {
+			prepareWebApp();
 
-		if (!isInsideTelegram()) {
-			setPhase({
-				kind: 'error',
-				message: 'Откройте карту через Telegram — вход работает только внутри него.',
+			if (!isInsideMessenger()) {
+				setPhase({
+					kind: 'error',
+					message: 'Откройте карту через Telegram или Макс — вход работает только внутри них.',
+				});
+				return;
+			}
+
+			return auth.enter(messenger, initData(), {
+				platform: platform(),
+				// ?from= есть только у кнопок в старых сообщениях бота, новые несут его в start_param.
+				from: new URLSearchParams(window.location.search).get('from'),
 			});
-			return;
-		}
-
-		auth.telegram(initData(), {
-			platform: webApp()?.platform,
-			// ?from= есть только у кнопок в старых сообщениях бота, новые несут его в start_param.
-			from: new URLSearchParams(window.location.search).get('from'),
 		})
 			.then((profile) => {
+				if (!profile) return;
 				setProfile(profile);
 				startAnalytics();
 				setPhase({ kind: 'ready' });

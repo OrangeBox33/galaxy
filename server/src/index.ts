@@ -8,6 +8,7 @@ import { watchNginxLimits } from './lib/nginxLimits.js';
 import { createApp } from './app.js';
 import { startLayoutScheduler } from './layout/runner.js';
 import { startOutboxWorker } from './bot/worker.js';
+import { loadMaxBot } from './bot/max.js';
 
 startAlerts();
 watchNginxLimits();
@@ -21,6 +22,7 @@ const server = createApp().listen(env.port, '127.0.0.1', () => {
 	// Оба держат состояние в памяти: инстанс pm2 обязан быть ровно один.
 	startLayoutScheduler();
 	startOutboxWorker();
+	void loadMaxBot();
 });
 
 async function shutdown(signal: string): Promise<void> {

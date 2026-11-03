@@ -19,14 +19,26 @@ export type InitData = {
 const MAX_AGE_SEC = 24 * 60 * 60;
 
 // Ключ — строка "WebAppData", сообщение — токен бота, не наоборот.
-const SECRET_KEY = createHmac('sha256', 'WebAppData').update(env.botToken).digest();
+// Макс подписывает тем же алгоритмом, только своим токеном.
+const secretKey = (token: string) => createHmac('sha256', 'WebAppData').update(token).digest();
+const TELEGRAM_KEY = secretKey(env.botToken);
+const MAX_KEY = secretKey(env.maxBotToken);
 
 export function verifyInitData(raw: string, now = Date.now()): InitData | null {
+	return verify(raw, TELEGRAM_KEY, now);
+}
+
+export function verifyMaxInitData(raw: string, now = Date.now()): InitData | null {
+	if (env.maxBotToken === '') return null;
+	return verify(raw, MAX_KEY, now);
+}
+
+function verify(raw: string, secret: Buffer, now: number): InitData | null {
 	if (typeof raw !== 'string' || raw.length === 0 || raw.length > 8192) return null;
 
 	const params = new URLSearchParams(raw);
 	const hash = params.get('hash');
-	if (!hash) return null;
+	if (!hash || params.getAll('hash').length !== 1) return null;
 	params.delete('hash');
 
 	const pairs: string[] = [];
@@ -36,7 +48,7 @@ export function verifyInitData(raw: string, now = Date.now()): InitData | null {
 	pairs.sort();
 	const dataCheckString = pairs.join('\n');
 
-	const computed = createHmac('sha256', SECRET_KEY).update(dataCheckString).digest('hex');
+	const computed = createHmac('sha256', secret).update(dataCheckString).digest('hex');
 	if (!safeEqualHex(computed, hash)) return null;
 
 	const authDate = Number(params.get('auth_date'));

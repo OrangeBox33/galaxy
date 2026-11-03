@@ -107,6 +107,11 @@ button {
 	}
 }
 
+/* Макс ставит свою шапку над приложением, полноэкранного режима у него нет. */
+:root[data-messenger='max'] {
+	--top-pad: max(12px, env(safe-area-inset-top));
+}
+
 .sky__tools {
 	position: absolute;
 	right: 12px;

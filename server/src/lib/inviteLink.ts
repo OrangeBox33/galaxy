@@ -4,6 +4,7 @@ import { randomInt } from 'node:crypto';
 import type { Prisma, User } from '@prisma/client';
 import { MAX_LINKS_PER_USER } from '../../../shared/config.js';
 import { env } from '../env.js';
+import { maxBotName } from '../bot/max.js';
 import { normalizePair } from './pair.js';
 import { markLayoutDirty } from '../layout/state.js';
 import { enqueue } from '../bot/outbox.js';
@@ -16,7 +17,11 @@ export const SHARE_TEXT =
 
 // start (а не startapp) ведёт в чат с ботом, а не сразу в Mini App: без этого
 // чата бот не может написать человеку — рассылка падала с «chat not found».
-export function inviteUrl(token: string): string {
+// Человеку из Макса — ссылка в Макс: делятся ею там же, где сидят. Пока имя
+// бота не пришло из API, отдаём телеграмную, токен у них общий.
+export function inviteUrl(token: string, fromMax = false): string {
+	const max = fromMax ? maxBotName() : null;
+	if (max) return `https://max.ru/${max}?start=${token}`;
 	return `https://t.me/${env.botUsername}?start=${token}`;
 }
 

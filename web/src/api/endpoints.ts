@@ -3,8 +3,11 @@ import type { AdminAnalytics, AdminLink, AdminUser, Graph, Profile } from './typ
 import type { Gender } from '../../../shared/config';
 
 export const auth = {
-	telegram: (initData: string, entry: { platform?: string; from?: string | null }) =>
-		api.post<Profile>('/auth/telegram', { initData, ...entry }),
+	enter: (
+		messenger: 'telegram' | 'max',
+		initData: string,
+		entry: { platform?: string; from?: string | null },
+	) => api.post<Profile>(`/auth/${messenger}`, { initData, ...entry }),
 	logout: () => api.post<void>('/auth/logout'),
 };
 

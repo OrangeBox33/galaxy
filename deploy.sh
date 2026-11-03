@@ -226,6 +226,7 @@ cp -R "$ROOT/server/dist/shared" "$STAGE/shared"
 cp -R "$ROOT/web/dist" "$STAGE/public"          # собранный клиент -> dist/public на сервере
 cp -R "$ROOT/server/prisma" "$STAGE/prisma"     # схема и миграции: на сервере migrate deploy
 cp "$ROOT/deploy/ecosystem.config.cjs" "$STAGE/ecosystem.config.cjs"
+cp "$ROOT/deploy/russian_trusted_root_ca.crt" "$STAGE/russian_trusted_root_ca.crt"
 cp "$ROOT/server/package-lock.json" "$STAGE/package-lock.json"
 
 # package.json берём серверный и правим два скрипта:

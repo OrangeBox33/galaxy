@@ -20,6 +20,7 @@ export default defineConfig({
 			TELEGRAM_BOT_TOKEN: '123456:TEST-TOKEN-FOR-UNIT-TESTS',
 			TELEGRAM_BOT_USERNAME: 'test_bot',
 			TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret',
+			MAX_BOT_TOKEN: 'TEST-MAX-TOKEN-FOR-UNIT-TESTS',
 			SESSION_SECRET: 'test-session-secret',
 			TELEGRAM_ADMIN_ID: '1',
 			AVATAR_DIR: '/tmp/galaxy-test-avatars',

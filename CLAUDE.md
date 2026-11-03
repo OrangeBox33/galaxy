@@ -408,6 +408,33 @@ _Звёзды внутри компании_:
 `chosen_inline_result` — отправителя, а кнопка `KeyboardButtonRequestUsers`
 работает лишь в чате с ботом. Искать обход заново не стоит.
 
+## Макс
+
+Тот же бот и то же мини-приложение в мессенджере Макс, небо общее. Без
+`MAX_BOT_TOKEN` в `.env` Макс выключен целиком.
+
+- **Личность.** Человек из Макса — строка с `maxId`, а `User.id` у него
+  `MAX_ID_OFFSET + maxId` (10¹⁵, `bot/max.ts`): выше любых Telegram-id и ещё
+  в пределах точного числа JS. Есть в обоих мессенджерах — две звезды; склеить
+  можно только руками (`mergeMax.js`). Склеенный — телеграмная строка с `maxId`
+  — остаётся телеграмным (`isFromMax` смотрит на диапазон id): уведомления,
+  имя, аватарка и ссылка оттуда, иначе вход из Макса их затёр бы.
+- **Бот** (`bot/max.ts`, `routes/maxBot.ts`): вебхук `/galaxy/max/webhook`,
+  секрет в заголовке `X-Max-Bot-Api-Secret` выводится из токена. Подписка —
+  при каждом старте, только в production: Макс снимает её после 8 ч без ответа,
+  а локальный запуск увёл бы её с боя. `bot_started` — аналог `/start`, токен
+  ссылки `max.ru/<бот>?start=<токен>` приходит в `payload`.
+- **Сертификат API выдан УЦ Минцифры**: Node без `NODE_EXTRA_CA_CERTS`
+  (`deploy/ecosystem.config.cjs`, корень лежит в `deploy/`) в Макс не ходит.
+- **Вход** — `POST /api/auth/max`: initData подписан тем же алгоритмом, что
+  в Telegram, только токеном Макса. Клиент узнаёт Макс по `#WebAppData=`
+  в адресе (у Telegram `#tgWebAppData=`) и лишь тогда грузит мост
+  `st.max.ru/js/max-web-app.js`. Шеринг — `shareMaxContent`.
+- **Чего нет у Макса:** галереи фото профиля (только аватарка из `photo_url`
+  или `GET /chats/{id}`), кнопки «@username» в карточке. Писать первым бот
+  не может, пока не нажали «Начать» (403/404 — как `chat not found`).
+- Адрес мини-приложения привязывается к боту руками в business.max.ru.
+
 ## Уведомления бота
 
 Два события: пришли по моей ссылке (`by_link`) и со мной связались (`linked`).
@@ -466,7 +493,7 @@ Node сообщают сразу, лимиты nginx Node вычитывает �
 ./deploy.sh --fast          пропустить зависимости и миграции принудительно
 ./deploy.sh --full          выполнить их принудительно
 
-cd server && npm test       74 теста
+cd server && npm test       79 тестов
 ```
 
 Тяжёлые шаги идут, только если изменились `package-lock.json`, `schema.prisma`
@@ -487,6 +514,7 @@ node server/src/lib/seedScenario.js                      две компании
 node server/src/lib/unlinkAll.js who                     id и число связей
 node server/src/lib/unlinkAll.js <id> [--dry]            развязать человека
 node server/src/lib/resetBirth.js <id>|all [--place]     показать рождение снова
+node server/src/lib/mergeMax.js <tg id> <id из Макса>    склеить две звезды человека
 ```
 
 Снимки — для опытов, не замена бэкапам: те снимает `pg_dump` по воскресеньям

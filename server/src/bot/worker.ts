@@ -4,6 +4,7 @@ import { displayName } from '../lib/names.js';
 import { normalizePair } from '../lib/pair.js';
 import { openMapKeyboard, sendMessage, type TelegramError } from './api.js';
 import { composeMessage, type OutboxEvent } from './outbox.js';
+import { isFromMax, maxOpenMapButtons, sendMaxMessage } from './max.js';
 
 const TICK_MS = 10 * 60 * 1000;
 const BATCH = 20;
@@ -38,11 +39,11 @@ export async function tick(now = new Date()): Promise<void> {
 					{ lastNotifiedAt: { lte: new Date(now.getTime() - NOTIFY_INTERVAL_MS) } },
 				],
 			},
-			select: { id: true },
+			select: { id: true, maxId: true },
 			take: BATCH,
 		});
 
-		for (const { id } of recipients) await deliver(id, now);
+		for (const { id, maxId } of recipients) await deliver(id, maxId, now);
 	} catch (err) {
 		log.error({ err }, 'воркер рассылки упал на итерации');
 	}
@@ -50,7 +51,7 @@ export async function tick(now = new Date()): Promise<void> {
 
 // Всё накопленное — одним сообщением. Событие, которое успело устареть,
 // в него не попадает: связь разорвана, автор заблокирован или уже упомянут.
-async function deliver(userId: bigint, now: Date): Promise<void> {
+async function deliver(userId: bigint, maxId: bigint | null, now: Date): Promise<void> {
 	const rows = await db.botOutbox.findMany({
 		where: { userId, status: 'QUEUED' },
 		orderBy: { createdAt: 'asc' },
@@ -83,7 +84,12 @@ async function deliver(userId: bigint, now: Date): Promise<void> {
 	if (events.length === 0) return;
 
 	try {
-		await sendMessage(userId, composeMessage(events), openMapKeyboard('notify'));
+		const text = composeMessage(events);
+		if (maxId !== null && isFromMax(userId)) {
+			await sendMaxMessage(maxId, text, maxOpenMapButtons('notify'));
+		} else {
+			await sendMessage(userId, text, openMapKeyboard('notify'));
+		}
 		await db.$transaction([
 			db.botOutbox.updateMany({
 				where: { id: { in: kept } },

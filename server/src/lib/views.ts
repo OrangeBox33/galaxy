@@ -2,6 +2,7 @@ import type { User } from '@prisma/client';
 import { isAdmin } from '../env.js';
 import { inviteUrl, SHARE_TEXT } from './inviteLink.js';
 import { displayName } from './names.js';
+import { isFromMax } from '../bot/max.js';
 
 export type ProfileView = {
 	id: string;
@@ -34,7 +35,7 @@ export function toProfile(user: User): ProfileView {
 		needsBirth: !user.bornSeen,
 		coreColor: user.coreColor,
 		flameColor: user.flameColor,
-		inviteUrl: user.inviteToken ? inviteUrl(user.inviteToken) : null,
+		inviteUrl: user.inviteToken ? inviteUrl(user.inviteToken, isFromMax(user.id)) : null,
 		shareText: SHARE_TEXT,
 	};
 }

@@ -9,6 +9,7 @@ import { rateLimit } from '../lib/rateLimit.js';
 import { bigint, int } from '../lib/validate.js';
 import { requireActiveUser, requireSession } from '../auth/middleware.js';
 import { fileUrl, profilePhotoIds } from '../bot/api.js';
+import { isFromMax } from '../bot/max.js';
 
 const MAX_PHOTOS = 10;
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -40,7 +41,8 @@ async function fetchPhotoIds(userId: bigint): Promise<string[]> {
 		select: { isTest: true, isBlocked: true },
 	});
 	if (!user || user.isBlocked) throw notFound('Пользователь не найден');
-	if (user.isTest) return [];
+	// Галереи фото у Макса в Bot API нет, остаётся одна аватарка.
+	if (user.isTest || isFromMax(userId)) return [];
 
 	try {
 		return await profilePhotoIds(userId, MAX_PHOTOS);

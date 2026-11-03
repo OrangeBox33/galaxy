@@ -21,6 +21,8 @@ module.exports = {
 			time: false,
 			env: {
 				NODE_ENV: 'production',
+				// Сертификат API Макса выдан УЦ Минцифры, которого Node не знает.
+				NODE_EXTRA_CA_CERTS: '/root/dev/galaxy/dist/russian_trusted_root_ca.crt',
 			},
 		},
 	],
