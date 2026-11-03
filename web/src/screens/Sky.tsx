@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { GRAPH_POLL_MS } from '../../../shared/config';
-import { starRadius } from '../../../shared/layout/params';
 import { me as meApi } from '../api/endpoints';
-import { playBirth, playClick } from '../sound';
+import { playClick } from '../sound';
 import { useStore } from '../store';
 import { EDGES_HIDDEN, createRenderer, type EdgeMode, type Renderer } from '../canvas/renderer';
+import { awaitSpot, flyAndIgnite, overview } from '../canvas/entrance';
 import { StarCard } from '../components/StarCard';
 import { ProfileSheet } from '../components/ProfileSheet';
 import { InviteSheet } from '../components/InviteSheet';
@@ -12,20 +12,14 @@ import { Suggestions } from '../components/Suggestions';
 import { haptic } from '../telegram/webapp';
 import { track, trackOnce } from '../analytics';
 
-// Подобрано в песочнице рождения (web/birth.html). Ближе камеры нет: потолок
-// зума задан в camera.ts, туда и упираемся.
-const BIRTH_FLY_MS = 900;
-const BIRTH_PAUSE_MS = 250;
-const BIRTH_RADIUS_PX = 64;
-// Окно цветов занимает низ экрана: поднимаем звезду над ним, иначе красить
-// будет нечего — она окажется ровно на кромке панели.
-const COLORS_SHIFT = 0.22;
-
 export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const rendererRef = useRef<Renderer | null>(null);
 	const spotRef = useRef<Promise<{ x: number; y: number }> | null>(null);
 	const unbornRef = useRef<string | null>(null);
+	const birthStarted = useRef(false);
+	// Тап по небу, пока открыто окно первого входа, листает дальше, а не выбирает звезду.
+	const tapAwayRef = useRef<(() => void) | null>(null);
 
 	const profile = useStore((state) => state.profile);
 	const graph = useStore((state) => state.graph);
@@ -35,7 +29,7 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 	const refreshGraph = useStore((state) => state.refreshGraph);
 	const refreshProfile = useStore((state) => state.refreshProfile);
 
-	// Первый вход идёт по шагам: знакомство → рождение звезды → цвета.
+	// Первый вход идёт по шагам: рождение звезды → имя и пол → цвета.
 	const [sheet, setSheet] = useState<'none' | 'intro' | 'colors' | 'profile'>('none');
 	// Кого прячем до рождения. Состоянием, а не вызовом рендерера на месте:
 	// эффект первого входа отрабатывает раньше, чем канва успевает появиться.
@@ -52,11 +46,7 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 		if (!profile?.needsBirth) return;
 		// Своя звезда не должна показаться раньше собственного рождения.
 		setUnborn(profile.id);
-		// Место просим сразу: сервер ищет его вместе с пересчётом раскладки, и эта
-		// секунда-две проходит, пока человек заполняет профиль.
 		spotRef.current = meApi.birth();
-		setSheet('intro');
-		track('first_intro');
 	}, [profile?.needsBirth, profile?.id]);
 
 	// Заведённому заранее (холодный старт) подсказки нашлись бы сразу: до рождения
@@ -74,41 +64,28 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 	async function birth(): Promise<void> {
 		const id = profile?.id;
 		if (!id) return;
-		setSheet('none');
+		let introShown = false;
 
 		try {
-			const spot = await (spotRef.current ?? meApi.birth());
+			const sky = rendererRef.current;
+			if (sky) await overview(sky);
+			const spot = await awaitSpot(spotRef.current ?? meApi.birth());
 			await refreshGraph();
 
 			const renderer = rendererRef.current;
-			if (renderer) {
-				const degree =
-					useStore.getState().graph?.nodes.find((item) => item.id === id)?.degree ?? 1;
-				renderer.camera.flyTo(
-					spot.x,
-					spot.y,
-					BIRTH_RADIUS_PX / starRadius(degree),
-					BIRTH_FLY_MS,
-				);
-				await new Promise((done) => setTimeout(done, BIRTH_FLY_MS + BIRTH_PAUSE_MS));
-				// Звук сам отмеряет до вспышки по birthTuning, поэтому зовётся вплотную к ignite.
-				playBirth(
-					useStore.getState().graph?.nodes.find((item) => item.id === id)?.degree ?? 0,
-				);
-				await renderer.ignite(id);
+			const degree = useStore.getState().graph?.nodes.find((item) => item.id === id)?.degree;
+			if (renderer) await flyAndIgnite(renderer, id, spot, degree ?? 1);
 
-				const camera = renderer.camera;
-				const lift = (camera.viewHeight * COLORS_SHIFT) / camera.zoom;
-				camera.flyTo(spot.x, spot.y + lift, camera.zoom, 450);
-			}
-
+			introShown = true;
+			setSheet('intro');
+			track('first_intro');
 			await meApi.born();
 			track('first_born');
 			await refreshProfile();
 		} finally {
 			// Не зажглась по ошибке сети — пусть звезда всё равно окажется на небе.
 			setUnborn(null);
-			setSheet('colors');
+			if (!introShown) setSheet('intro');
 		}
 	}
 
@@ -163,6 +140,13 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 	useEffect(() => {
 		if (graph) rendererRef.current?.setGraph(graph);
 	}, [graph]);
+
+	// Ждём граф: подгонять камеру под пустое небо нечего.
+	useEffect(() => {
+		if (!profile?.needsBirth || !graph || birthStarted.current) return;
+		birthStarted.current = true;
+		void birth();
+	}, [profile?.needsBirth, graph]);
 
 	useEffect(() => {
 		rendererRef.current?.setSelection(selection?.kind === 'node' ? selection.id : null);
@@ -283,9 +267,19 @@ export function Sky({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 				onFocus={(id) => rendererRef.current?.focusOn(id)}
 			/>
 
-			{sheet === 'intro' && <ProfileSheet variant="intro" onClose={() => void birth()} />}
+			{sheet === 'intro' && (
+				<ProfileSheet
+					variant="intro"
+					tapAway={tapAwayRef}
+					onClose={() => setSheet('colors')}
+				/>
+			)}
 			{sheet === 'colors' && (
-				<ProfileSheet variant="colors" onClose={() => setSheet('none')} />
+				<ProfileSheet
+					variant="colors"
+					tapAway={tapAwayRef}
+					onClose={() => setSheet('none')}
+				/>
 			)}
 			{sheet === 'profile' && (
 				<ProfileSheet variant="full" onClose={() => setSheet('none')} />

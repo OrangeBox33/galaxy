@@ -323,11 +323,11 @@ button {
 		border-radius: 20px;
 	}
 
-	/* Окно цветов — у нижнего края: звезда остаётся выше него. */
-	.sheet--colors {
+	/* Окна первого входа — у нижнего края: звезда остаётся выше них. */
+	.sheet--low {
 		align-items: flex-end;
 	}
-	.sheet--colors .sheet__body {
+	.sheet--low .sheet__body {
 		margin-bottom: 18px;
 	}
 
@@ -906,7 +906,7 @@ button {
 		0 0 0 4px rgba(233, 240, 255, 0.9);
 }
 
-/* Окна с палитрой не закрывают небо: звезду красят, глядя на неё же. */
+/* Окна первого входа и профиля не закрывают небо: звезду видно, пока её заводят и красят. */
 .sheet--bare {
 	background: none;
 	backdrop-filter: none;

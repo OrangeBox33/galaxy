@@ -172,11 +172,19 @@ export class Camera {
 		if (this.flight) {
 			const t = Math.min(1, (performance.now() - this.flight.start) / this.flight.duration);
 			const k = easeInOutCubic(t);
-			this.moveTo(
-				this.flight.fromX + (this.flight.toX - this.flight.fromX) * k,
-				this.flight.fromY + (this.flight.toY - this.flight.fromY) * k,
-			);
-			this.zoom = this.flight.fromZoom + (this.flight.toZoom - this.flight.fromZoom) * k;
+			const { fromX, fromY, toX, toY, fromZoom, toZoom } = this.flight;
+			// Зум — в разах, а не в единицах: приближение глаз видит отношением, и линейный
+			// с «всего неба» до рождения проскакивал почти весь путь в середине полёта.
+			// Опорная точка (цель на приближении, начало на отдалении) едет по экрану
+			// ровно, иначе на быстро растущем зуме её уносит вбок.
+			this.zoom = fromZoom * (toZoom / fromZoom) ** k;
+			if (toZoom >= fromZoom) {
+				const rest = ((1 - k) * fromZoom) / this.zoom;
+				this.moveTo(toX - (toX - fromX) * rest, toY - (toY - fromY) * rest);
+			} else {
+				const done = (k * toZoom) / this.zoom;
+				this.moveTo(fromX + (toX - fromX) * done, fromY + (toY - fromY) * done);
+			}
 			if (t >= 1) this.flight = null;
 			return;
 		}

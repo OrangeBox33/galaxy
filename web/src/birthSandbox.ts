@@ -1,21 +1,30 @@
 // Отладочная страница /galaxy/birth.html: в сборку не попадает.
-// Рождение звезды на настоящем небе: граф и раскладка считаются так же, как
-// на бою (новичок приходит инкрементально), рисует тот же createRenderer.
+// Первый вход на настоящем небе: граф и раскладка считаются так же, как
+// на бою (новичок приходит инкрементально), рисует тот же createRenderer,
+// камерой водит тот же entrance.ts, что и приложение.
 import { computeLayout } from '../../shared/layout/index';
 import { createRenderer } from './canvas/renderer';
 import { birthTuning } from './canvas/birth';
+import { awaitSpot, entranceTuning, flyAndIgnite, overview } from './canvas/entrance';
+import {
+	introTuning,
+	type IntroMode,
+	type IntroPace,
+	type IntroRoot,
+} from './canvas/constellationIntro';
 import { createLayoutPanel, type Bag, type Control, type Section } from './layoutPanel';
 import { buildTestGraph, DEFAULT_SHAPE } from './layout/testGraph';
 import type { Graph, GraphNode } from './api/types';
 import './styles.css';
 
-const STORAGE_KEY = 'galaxy:birth-sandbox-2';
+const STORAGE_KEY = 'galaxy:birth-sandbox-5';
 const COLORS_KEY = `${STORAGE_KEY}:colors`;
 
 // Новичок цепляется к тесной компании: у неё соседи рядом, видно, куда он сел.
 const ANCHORS = [50, 51, 52, 53, 54];
 
-const view: Bag = { links: 2, zoom: 9, flyMs: 900, pauseMs: 250, motley: false };
+// serverMs — сколько «сервер» ищет место: на бою 0.6–2 с.
+const view: Bag = { links: 2, serverMs: 1500, motley: false };
 
 const colors = { core: '#FFFFFF', flame: '#FFFFFF' };
 
@@ -105,23 +114,47 @@ function reset(): void {
 	status('готов');
 }
 
-async function play(): Promise<void> {
+async function run(steps: () => Promise<void>): Promise<void> {
 	if (running) return;
 	running = true;
-	reset();
-
-	renderer.camera.flyTo(born.x, born.y, view.zoom as number, view.flyMs as number);
-	await wait((view.flyMs as number) + (view.pauseMs as number));
-
 	const started = performance.now();
-	status('рождается…');
-	await renderer.ignite(newborn);
-	status(`${Math.round(performance.now() - started)} мс`);
-	running = false;
+	try {
+		await steps();
+	} finally {
+		status(`${Math.round(performance.now() - started)} мс`);
+		running = false;
+	}
+}
+
+// Всё как на бою: рендерер на входе проявляет созвездия заново.
+function enter(): Promise<void> {
+	return run(async () => {
+		reset();
+		renderer.replayIntro();
+		status('небо целиком…');
+		await overview(renderer);
+		await awaitSpot(wait(view.serverMs as number));
+		status('рождается…');
+		await flyAndIgnite(renderer, newborn, born, links());
+	});
+}
+
+function birthOnly(): Promise<void> {
+	return run(async () => {
+		reset();
+		renderer.fit();
+		status('рождается…');
+		await flyAndIgnite(renderer, newborn, born, links());
+	});
+}
+
+function linesOnly(): void {
+	renderer.fit();
+	renderer.replayIntro();
 }
 
 function status(state: string): void {
-	panel.setStatus(`${state} · связей ${links()} · зум ${view.zoom}`);
+	panel.setStatus(`${state} · связей ${links()}`);
 }
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -137,15 +170,82 @@ const range = (key: string, label: string, min: number, max: number, step: numbe
 
 const sections: Section[] = [
 	{
-		title: 'Рождение',
+		title: 'Вход',
 		bag: view,
 		controls: [
-			{ kind: 'button', label: 'Родить заново (пробел)', run: () => void play() },
+			{ kind: 'button', label: 'Вход целиком (пробел)', run: () => void enter() },
+			{ kind: 'button', label: 'Только рождение', run: () => void birthOnly() },
+			{ kind: 'button', label: 'Только линии', run: linesOnly },
 			range('links', 'связей у новичка', 0, ANCHORS.length, 1),
-			range('zoom', 'зум при рождении', 1, 30, 0.5),
-			range('flyMs', 'подлёт камеры, мс', 0, 2000, 50),
-			range('pauseMs', 'пауза перед рождением, мс', 0, 1500, 50),
+			range('serverMs', 'сервер ищет место, мс', 0, 3000, 50),
 			{ kind: 'toggle', key: 'motley', label: 'раскрасить всё небо' },
+		],
+	},
+	{
+		title: 'Камера',
+		bag: entranceTuning as unknown as Bag,
+		controls: [
+			range('skyMs', 'небо целиком не меньше, мс', 0, 3000, 50),
+			range('driftZoom', 'наплыв, раз', 1, 2.5, 0.05),
+			range('driftMs', 'наплыв, мс', 500, 10000, 100),
+			range('flyMs', 'подлёт, мс', 0, 3000, 50),
+			range('pauseMs', 'пауза перед рождением, мс', 0, 1500, 50),
+			range('radiusPx', 'звезда при рождении, px', 16, 160, 2),
+			range('lift', 'подъём над окном, доля экрана', 0, 0.45, 0.01),
+		],
+	},
+	{
+		title: 'Линии на входе',
+		bag: introTuning as unknown as Bag,
+		controls: [
+			{
+				kind: 'choice',
+				label: 'появление',
+				options: [
+					{ key: 'fade', label: 'разом' },
+					{ key: 'wave', label: 'волна снизу' },
+					{ key: 'lightning', label: 'молния' },
+				],
+				get: () => introTuning.mode,
+				set: (value) => {
+					introTuning.mode = value as IntroMode;
+					linesOnly();
+				},
+			},
+			{
+				kind: 'choice',
+				label: 'молния начинается',
+				options: [
+					{ key: 'bottom', label: 'от меня / снизу' },
+					{ key: 'random', label: 'со случайной' },
+				],
+				get: () => introTuning.root,
+				set: (value) => {
+					introTuning.root = value as IntroRoot;
+					linesOnly();
+				},
+			},
+			{
+				kind: 'choice',
+				label: 'скорость молнии',
+				options: [
+					{ key: 'distance', label: 'ровная по небу' },
+					{ key: 'hops', label: 'линия за равное время' },
+				],
+				get: () => introTuning.pace,
+				set: (value) => {
+					introTuning.pace = value as IntroPace;
+					linesOnly();
+				},
+			},
+			range('delay', 'чистое небо, мс', 0, 3000, 50),
+			range('firstDuration', 'первая: проявление, мс (0 — без неё)', 0, 2000, 10),
+			range('firstFlash', 'первая: вспышка, раз ярче', 0, 6, 0.1),
+			range('firstFade', 'первая: гаснет до нуля за, мс', 10, 1000, 10),
+			range('dark', 'темнота, мс', 0, 3000, 50),
+			range('duration', 'вторая: проявление, мс', 300, 10000, 50),
+			range('flash', 'вторая: вспышка, раз ярче', 0, 6, 0.1),
+			range('afterglow', 'вторая: гаснет за, мс', 50, 3000, 50),
 		],
 	},
 	{
@@ -194,7 +294,12 @@ const sections: Section[] = [
 
 const panel = createLayoutPanel({
 	sections,
-	snapshot: () => ({ ...colors, tuning: birthTuning }),
+	snapshot: () => ({
+		...colors,
+		tuning: birthTuning,
+		entrance: entranceTuning,
+		intro: introTuning,
+	}),
 	onChange: () => reset(),
 	storageKey: STORAGE_KEY,
 });
@@ -216,16 +321,13 @@ function restoreColors(): void {
 window.addEventListener('keydown', (event) => {
 	if (event.code !== 'Space') return;
 	event.preventDefault();
-	void play();
+	void enter();
 });
 
 // Размер канвы рендерер узнаёт в первом кадре: до этого подгонка сводит небо в точку.
 requestAnimationFrame(() => {
 	reset();
-	requestAnimationFrame(() => {
-		renderer.fit();
-		void play();
-	});
+	requestAnimationFrame(() => void enter());
 });
 
 (window as unknown as { renderer: typeof renderer }).renderer = renderer;

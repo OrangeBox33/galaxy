@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
 	DEFAULT_CORE_COLOR,
 	DEFAULT_FLAME_COLOR,
@@ -19,15 +19,18 @@ const GENDER_LABELS: { value: Gender; label: string }[] = [
 
 const SWIPE_CLOSE_PX = 90;
 
-// Три наполнения: знакомство до рождения звезды, выбор цветов сразу после него
-// и полный профиль по нажатию на свою звезду.
+// Три наполнения: имя и пол сразу после рождения звезды, следом цвета, и полный
+// профиль по нажатию на свою звезду.
 export type ProfileVariant = 'intro' | 'colors' | 'full';
 
 export function ProfileSheet({
 	variant = 'full',
+	tapAway,
 	onClose,
 }: {
 	variant?: ProfileVariant;
+	// Тап по небу мимо окна сохраняет то, что на экране.
+	tapAway?: { current: (() => void) | null };
 	onClose: () => void;
 }) {
 	const profile = useStore((state) => state.profile);
@@ -46,6 +49,14 @@ export function ProfileSheet({
 
 	const bodyRef = useRef<HTMLDivElement>(null);
 	const drag = useRef<{ pointer: number; from: number } | null>(null);
+
+	useEffect(() => {
+		if (!tapAway || !profile) return;
+		tapAway.current = () => void save();
+		return () => {
+			tapAway.current = null;
+		};
+	});
 
 	if (!profile) return null;
 	const withColors = variant !== 'intro';
@@ -89,6 +100,7 @@ export function ProfileSheet({
 	}
 
 	async function save(): Promise<void> {
+		if (busy) return;
 		setBusy(true);
 		setError(null);
 		try {
@@ -96,7 +108,9 @@ export function ProfileSheet({
 				...(withFields
 					? {
 							...(profile!.nameLockedByAdmin ? {} : { displayName: name.trim() }),
-							age: age.trim() === '' ? null : Number(age),
+							...(variant === 'full'
+								? { age: age.trim() === '' ? null : Number(age) }
+								: {}),
 							gender,
 						}
 					: {}),
@@ -135,10 +149,9 @@ export function ProfileSheet({
 		}
 	}
 
-	// Окно цветов не закрывает небо: звезда должна быть видна, пока её красят.
 	if (variant === 'colors') {
 		return (
-			<div className="sheet sheet--bare sheet--colors">
+			<div className="sheet sheet--bare sheet--low">
 				<div className="sheet__body">
 					<h2>Цвет вашей звезды</h2>
 					<div className="field">
@@ -202,7 +215,11 @@ export function ProfileSheet({
 	const swipeable = variant === 'full';
 
 	return (
-		<div className={swipeable ? 'sheet sheet--bare sheet--profile' : 'sheet'}>
+		<div
+			className={
+				swipeable ? 'sheet sheet--bare sheet--profile' : 'sheet sheet--bare sheet--low'
+			}
+		>
 			<div className="sheet__body" ref={bodyRef}>
 				{swipeable && (
 					<>
@@ -229,16 +246,23 @@ export function ProfileSheet({
 					{nameInput}
 				</label>
 				{lockedNote}
-				<div className="row">
-					<label className="field row__age">
-						<span>Возраст</span>
-						{ageInput}
-					</label>
-					<div className="field row__wide">
+				{variant === 'full' ? (
+					<div className="row">
+						<label className="field row__age">
+							<span>Возраст</span>
+							{ageInput}
+						</label>
+						<div className="field row__wide">
+							<span>Пол</span>
+							{genderPicker}
+						</div>
+					</div>
+				) : (
+					<div className="field">
 						<span>Пол</span>
 						{genderPicker}
 					</div>
-				</div>
+				)}
 
 				{withColors && (
 					<>

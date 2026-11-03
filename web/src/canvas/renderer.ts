@@ -4,6 +4,7 @@ import { clamp01, easeInOutCubic, easeOutBack, prefersReducedMotion } from './an
 import { birthStar, birthTuning, paintBirth, PROTOSTAR, type BirthStar } from './birth';
 import { Camera } from './camera';
 import { buildConstellation, type ConstellationPoint } from './constellation';
+import { introOver, introTuning, lightningPlan, revealLine, type IntroPlan } from './constellationIntro';
 import { DUST_PARALLAX, DUST_TILE_SIZE, dustTile } from './dust';
 import { CORE, CORE_RGB, SKY_BOTTOM, SKY_MID, SKY_TOP, mix, rgb, rgba, type RGB } from './palette';
 import {
@@ -258,6 +259,8 @@ export function createRenderer(
 	let constellationDirty = true;
 	let constellationLimits = '';
 	let constellationShown = 0;
+	let introAt = performance.now() + introTuning.delay;
+	let introPlan: IntroPlan | null = null;
 
 	function resize(): void {
 		const rect = canvas.getBoundingClientRect();
@@ -343,8 +346,10 @@ export function createRenderer(
 	}
 
 	function fadeConstellation(dt: number): void {
-		const step = (dt * 1000) / CONSTELLATION_FADE_MS;
-		const shown = constellationOn && selectedId === null && edgesHidden() ? 1 : 0;
+		const since = performance.now() - introAt;
+		// На входе линии проводит revealLine, а общая яркость сразу полная.
+		const step = introOver(since) ? (dt * 1000) / CONSTELLATION_FADE_MS : 1;
+		const shown = since > 0 && constellationOn && selectedId === null && edgesHidden() ? 1 : 0;
 		constellationShown = clamp01(constellationShown + (shown ? step : -step));
 		for (const [key, line] of constellation) {
 			line.level = clamp01(line.level + (line.on ? step : -step));
@@ -648,11 +653,27 @@ export function createRenderer(
 		const shown = easeInOutCubic(constellationShown);
 		const t = now / 1000;
 		const wave = Math.PI / LAYOUT_PARAMS.R_MAX;
-		for (const { a, b, level } of constellation.values()) {
+		const elapsed = now - introAt;
+		const intro = !introOver(elapsed);
+		if (intro && introTuning.mode === 'lightning' && !introPlan && constellation.size > 0) {
+			introPlan = lightningPlan(
+				[...constellation].map(([key, { a, b }]) => ({
+					key,
+					a: { id: a.id, x: a.toX, y: a.toY },
+					b: { id: b.id, x: b.toX, y: b.toY },
+				})),
+				introTuning.root === 'random' || hidden.has(scene.me) ? null : scene.me,
+			);
+		}
+		for (const [key, { a, b, level }] of constellation) {
 			if (level <= 0 || hidden.has(a.id) || hidden.has(b.id)) continue;
 			const pa = project(a, now);
 			const pb = project(b, now);
-			let alpha = look.alpha * shown * easeInOutCubic(level);
+			const lit = intro
+				? revealLine(key, pa, pb, camera.viewHeight, elapsed, introPlan)
+				: null;
+			if (lit && lit.fraction <= 0) continue;
+			let alpha = look.alpha * shown * easeInOutCubic(level) * (lit?.alpha ?? 1);
 			if (!reduced && look.breathePeriod > 0) {
 				// Фаза от места на небе, а не от экрана: иначе волна ехала бы вместе с камерой.
 				const phase = (a.toX + b.toX + a.toY + b.toY) * 0.5 * wave;
@@ -660,10 +681,16 @@ export function createRenderer(
 				alpha *= 1 - look.breatheDepth * beat;
 			}
 
+			const from = !lit || lit.fromA ? pa : pb;
+			const to = !lit || lit.fromA ? pb : pa;
+			const k = lit?.fraction ?? 1;
+			const tipX = from.sx + (to.sx - from.sx) * k;
+			const tipY = from.sy + (to.sy - from.sy) * k;
+
 			ctx.strokeStyle = CORE;
 			ctx.beginPath();
-			ctx.moveTo(pa.sx, pa.sy);
-			ctx.lineTo(pb.sx, pb.sy);
+			ctx.moveTo(from.sx, from.sy);
+			ctx.lineTo(tipX, tipY);
 			if (look.glowAlpha > 0) {
 				ctx.lineWidth = look.glowWidth;
 				ctx.globalAlpha = alpha * look.glowAlpha * 0.4;
@@ -672,9 +699,20 @@ export function createRenderer(
 				ctx.globalAlpha = alpha * look.glowAlpha;
 				ctx.stroke();
 			}
+			// Вспышка — только самой линии: на ореоле она расплывалась пятном. И не выше
+			// единицы: больший globalAlpha канва молча игнорирует.
+			const core = Math.min(1, alpha * (1 + (lit?.boost ?? 0)));
 			ctx.lineWidth = EDGE_WIDTH;
-			ctx.globalAlpha = alpha;
+			ctx.globalAlpha = core;
 			ctx.stroke();
+
+			if (k < 1) {
+				ctx.fillStyle = CORE;
+				ctx.globalAlpha = Math.min(1, core * 1.5);
+				ctx.beginPath();
+				ctx.arc(tipX, tipY, EDGE_WIDTH * 1.6, 0, Math.PI * 2);
+				ctx.fill();
+			}
 		}
 		ctx.restore();
 	}
@@ -1341,6 +1379,13 @@ export function createRenderer(
 			});
 		},
 		fit: () => camera.fit(scene.bounds),
+		// Для песочницы: проявить созвездия заново, как на входе.
+		replayIntro(): void {
+			introAt = performance.now() + introTuning.delay;
+			introPlan = null;
+			constellationShown = 0;
+			for (const line of constellation.values()) line.level = 0;
+		},
 		destroy(): void {
 			running = false;
 			canvas.removeEventListener('pointerdown', onPointerDown);
