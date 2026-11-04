@@ -1,17 +1,8 @@
-// Кто с кем «одна компания»: внутри компании своя середина, между компаниями
-// отталкивание сильнее — из скопления получается рисунок.
-//
-// Детерминированность обязательна, как и во всей раскладке: узлы обходятся
-// по индексу (он задан порядком ids), ничьи разрешаются меньшей меткой.
+// Компания — связная часть неба. Сообщества (label propagation, Лувен) пробовались:
+// одна связь перекраивала разбиение у всех и двигала небо на 700 единиц из 1400.
 import { rankScale } from './centrality.js';
 
 export type Clusters = {
-	component: number[];
-	// Индекс сообщества (label propagation): внутри компоненты их может быть
-	// несколько, у разных компонент сообщества заведомо разные.
-	cluster: number[];
-	// Те же сообщества, но номерами подряд 0…groupCount−1: по ним раскладываются
-	// центроиды в массивы на каждой итерации.
 	group: number[];
 	groupCount: number;
 	groupSize: number[];
@@ -21,30 +12,15 @@ export type Clusters = {
 	localCentrality: number[];
 };
 
-export const CLUSTER_ITERATIONS = 24;
-
-export function findClusters(neighbours: number[][], iterations: number): Clusters {
+export function findClusters(neighbours: number[][]): Clusters {
 	const n = neighbours.length;
-	const component = components(neighbours, n);
-	const cluster = propagate(neighbours, n, iterations);
-
-	// Метки после propagate — это чьи-то индексы вразброс.
-	const dense = new Map<number, number>();
-	const group = new Array<number>(n);
-	for (let i = 0; i < n; i += 1) {
-		let id = dense.get(cluster[i]);
-		if (id === undefined) {
-			id = dense.size;
-			dense.set(cluster[i], id);
-		}
-		group[i] = id;
-	}
-	const groupCount = dense.size;
+	const group = components(neighbours, n);
+	const groupCount = n === 0 ? 0 : Math.max(...group) + 1;
 
 	const groupSize = new Array<number>(groupCount).fill(0);
 	for (let i = 0; i < n; i += 1) groupSize[group[i]] += 1;
 
-	return { component, cluster, group, groupCount, groupSize, localCentrality: local(neighbours, group, groupCount, n) };
+	return { group, groupCount, groupSize, localCentrality: local(neighbours, group, groupCount, n) };
 }
 
 // Центральность внутри компании. Связи наружу не в счёт — иначе мостик
@@ -89,41 +65,4 @@ function components(neighbours: number[][], n: number): number[] {
 		}
 	}
 	return component;
-}
-
-// Каждый узел берёт метку, которая чаще всего встречается у его соседей.
-// На графах нашего размера сходится за два-три десятка проходов; не сойдётся —
-// останется чуть более дробное разбиение, для сил это не беда.
-function propagate(neighbours: number[][], n: number, iterations: number): number[] {
-	const label = new Array<number>(n);
-	for (let i = 0; i < n; i += 1) label[i] = i;
-
-	const votes = new Map<number, number>();
-	for (let step = 0; step < iterations; step += 1) {
-		let changed = false;
-		for (let i = 0; i < n; i += 1) {
-			if (neighbours[i].length === 0) continue;
-			votes.clear();
-			for (const neighbour of neighbours[i]) {
-				const key = label[neighbour];
-				votes.set(key, (votes.get(key) ?? 0) + 1);
-			}
-			let best = label[i];
-			let bestCount = -1;
-			for (const [key, count] of votes) {
-				// Ничья — за меньшей меткой: иначе результат зависел бы
-				// от порядка обхода Map.
-				if (count > bestCount || (count === bestCount && key < best)) {
-					best = key;
-					bestCount = count;
-				}
-			}
-			if (best !== label[i]) {
-				label[i] = best;
-				changed = true;
-			}
-		}
-		if (!changed) break;
-	}
-	return label;
 }

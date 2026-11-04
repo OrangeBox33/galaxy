@@ -3,7 +3,7 @@
 // поэтому подсказки пересчитываются сразу после своего же «Связать»,
 // не дожидаясь сервера. Стоит это суммы степеней моих друзей.
 
-import { CLUSTER_ITERATIONS, findClusters } from './layout/clusters.js';
+import { findClusters } from './layout/clusters.js';
 
 // Единицы мало: один общий друг — это почти любой встречный, и окно
 // заполнялось бы случайными людьми.
@@ -76,7 +76,7 @@ export function suggestHubs<T extends SuggestNode>(
 	graph: SuggestGraph<T>,
 	dismissed: ReadonlySet<string>,
 ): T[] {
-	// Метки сообществ зависят от порядка узлов, а /api/graph отдаёт его
+	// Номера компаний зависят от порядка узлов, а /api/graph отдаёт его
 	// произвольным: без сортировки компании перекраивались бы на каждом опросе.
 	const nodes = [...graph.nodes].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
 	const index = new Map(nodes.map((node, i) => [node.id, i]));
@@ -93,7 +93,7 @@ export function suggestHubs<T extends SuggestNode>(
 	}
 	for (const list of neighbours) list.sort((x, y) => x - y);
 
-	const { cluster } = findClusters(neighbours, CLUSTER_ITERATIONS);
+	const { group: cluster } = findClusters(neighbours);
 	const byDegree = (x: T, y: T) => y.degree - x.degree || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0);
 	const groups = new Map<number, T[]>();
 	nodes.forEach((node, i) => {

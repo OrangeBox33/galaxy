@@ -1,5 +1,5 @@
 // Симуляция звёздной системы (раздел 7.2–7.5). Центр C зафиксирован в (0,0).
-import { CLUSTER_ITERATIONS, findClusters, type Clusters } from './clusters.js';
+import { findClusters, type Clusters } from './clusters.js';
 import {
 	LAYOUT_PARAMS,
 	resolveParams,
@@ -52,7 +52,6 @@ const GROUP_D_MIN = 120;
 // Насколько связи удлиняют пружину у звезды с их большим числом.
 const L_MASS = 0.18;
 const SEPARATION_GAP = 6;
-// Потолок проходов label propagation: обычно сходится за пять-шесть.
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
@@ -95,9 +94,7 @@ export function simulate(
 
 	const P = resolveParams(options.params);
 	const neighbours = options.neighbours ?? buildNeighbours(n, edges);
-	const clusters = options.clusters ?? findClusters(neighbours, CLUSTER_ITERATIONS);
-	const { component } = clusters;
-
+	const clusters = options.clusters ?? findClusters(neighbours);
 	const { group, groupCount, groupSize, localCentrality } = clusters;
 
 	// Орбита компании: суперкластер (доля 1) — в середину, одиночка (доля
@@ -265,9 +262,7 @@ export function simulate(
 				}
 				const dist = Math.sqrt(distSq);
 				const denom = Math.max(distSq, D_MIN * D_MIN);
-				// Компонента, а не компания: компании внутри одной компоненты
-				// разводит K_GROUP_REP, второй надбавки им не надо.
-				const apart = component[i] !== component[j] ? P.REP_COMPONENT : 1;
+				const apart = group[i] !== group[j] ? P.REP_COMPONENT : 1;
 				const force = (P.K_REP * apart * nodes[i].mass * nodes[j].mass) / denom;
 				const ux = dx / dist;
 				const uy = dy / dist;

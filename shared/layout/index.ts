@@ -2,7 +2,7 @@
 // не совпадут: стандарт JavaScript не фиксирует точность sin и cos. Истина
 // серверная, клиентская раскладка — лишь предсказание.
 import { computeCentrality } from './centrality.js';
-import { CLUSTER_ITERATIONS, findClusters } from './clusters.js';
+import { findClusters } from './clusters.js';
 import { centerByMass, percentileScale } from './normalize.js';
 import { resolveParams, starRadius, type LayoutOverrides, type LayoutParams } from './params.js';
 import { applyTransform, bestTransform, type Pair } from './procrustes.js';
@@ -48,7 +48,7 @@ export type LayoutResult = {
 		y: number;
 		degree: number;
 		centrality: number;
-		// Раскладке сообщества нужны для сил, наружу отдаются ради песочницы:
+		// Раскладке компании нужны для сил, наружу отдаются ради песочницы:
 		// там небо красится по компаниям.
 		cluster: number;
 		component: number;
@@ -74,7 +74,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
 	);
 
 	const neighbours = buildNeighbours(input.ids.length, input.edges);
-	const clusters = findClusters(neighbours, CLUSTER_ITERATIONS);
+	const clusters = findClusters(neighbours);
 
 	// Небо на входе растянуто нормализацией: сжимаем его к масштабу симуляции,
 	// иначе первые же итерации уйдут на переезд.
@@ -119,8 +119,8 @@ export function computeLayout(input: LayoutInput): LayoutResult {
 			y: node.y,
 			degree: node.degree,
 			centrality: node.centrality,
-			cluster: clusters.cluster[i],
-			component: clusters.component[i],
+			cluster: clusters.group[i],
+			component: clusters.group[i],
 		})),
 		iterations,
 		scale,
